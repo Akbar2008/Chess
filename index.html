@@ -1,0 +1,2866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>The Enchanted Chess — Cinematic 3D Wizard Chess</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <style>
+    :root {
+      --obsidian: #07090e;
+      --obsidian-glass: rgba(10, 14, 24, 0.82);
+      --bronze: #8c6d46;
+      --gold: #d4af37;
+      --gold-bright: #f5d77f;
+      --royal-blue: #1e3a8a;
+      --arcane-cyan: #38bdf8;
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #05070b;
+      color: #e2e8f0;
+      font-family: 'Inter', sans-serif;
+    }
+    .font-cinzel {
+      font-family: 'Cinzel', Georgia, serif;
+    }
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      background: radial-gradient(circle at center, #0f172a 0%, #030508 100%);
+    }
+    .obsidian-panel {
+      background: linear-gradient(145deg, rgba(12, 16, 28, 0.88) 0%, rgba(6, 9, 15, 0.94) 100%);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(212, 175, 55, 0.28);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .obsidian-button {
+      background: linear-gradient(180deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      color: #f8fafc;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 240, 200, 0.12);
+    }
+    .obsidian-button:hover:not(:disabled) {
+      border-color: #f5d77f;
+      background: linear-gradient(180deg, rgba(51, 65, 85, 0.92) 0%, rgba(23, 37, 84, 0.95) 100%);
+      box-shadow: 0 0 22px rgba(212, 175, 55, 0.35), inset 0 1px 0 rgba(255, 240, 200, 0.28);
+      transform: translateY(-1px);
+    }
+    .obsidian-button:active:not(:disabled) {
+      transform: translateY(0px) scale(0.99);
+    }
+    .obsidian-button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .gold-gradient-text {
+      background: linear-gradient(180deg, #fff6d6 0%, #d4af37 55%, #9a7420 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 4px 24px rgba(212, 175, 55, 0.25);
+    }
+    .arcane-glow {
+      box-shadow: 0 0 25px rgba(56, 189, 248, 0.35), inset 0 0 12px rgba(56, 189, 248, 0.2);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(8, 11, 18, 0.6);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(212, 175, 55, 0.4);
+      border-radius: 3px;
+    }
+    @keyframes pulseRune {
+      0%, 100% { opacity: 0.65; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.03); }
+    }
+    .rune-pulse {
+      animation: pulseRune 2.8s infinite ease-in-out;
+    }
+    .cinematic-letterbox {
+      transition: height 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+  </style>
+</head>
+<body>
+  <!-- 3D WebGL Viewport -->
+  <div id="canvas-container" aria-label="3D Wizard Chess Castle Viewport"></div>
+
+  <!-- Cinematic Letterbox Bars (active during intro, combat, checkmate) -->
+  <div id="letterbox-top" class="cinematic-letterbox fixed top-0 left-0 right-0 h-0 bg-black z-20 pointer-events-none"></div>
+  <div id="letterbox-bottom" class="cinematic-letterbox fixed bottom-0 left-0 right-0 h-0 bg-black z-20 pointer-events-none"></div>
+
+  <!-- Opening Cinematic Overlay -->
+  <div id="intro-overlay" class="fixed inset-0 z-30 pointer-events-none flex flex-col justify-between p-6">
+    <div class="flex justify-between items-start">
+      <div class="obsidian-panel px-4 py-2 rounded-lg border border-amber-500/30">
+        <span id="intro-phase-label" class="font-cinzel text-xs tracking-widest uppercase text-amber-300">Ancient Chamber Awakening...</span>
+      </div>
+      <button id="btn-skip-intro" type="button" class="pointer-events-auto obsidian-button px-4 py-2 rounded-lg font-cinzel text-xs tracking-wider uppercase flex items-center gap-2">
+        <span>Skip Intro</span>
+        <span aria-hidden="true">⏭</span>
+      </button>
+    </div>
+    <div class="text-center mb-12">
+      <p id="intro-subtitle" class="font-cinzel text-lg md:text-2xl text-amber-100/90 tracking-widest drop-shadow-lg transition-opacity duration-500">
+        "Beyond the subterranean chambers stands the trials of the Living Stone..."
+      </p>
+    </div>
+  </div>
+
+  <!-- Combat Cinematic Overlay (Skip / Slow-Mo controls during capture) -->
+  <div id="combat-overlay" class="hidden fixed inset-x-0 bottom-8 z-30 pointer-events-none flex flex-col items-center gap-3 px-4">
+    <div class="obsidian-panel px-6 py-2.5 rounded-full flex items-center gap-4 border border-amber-400/50 shadow-2xl">
+      <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+      <span id="combat-banner-text" class="font-cinzel text-xs md:text-sm tracking-widest text-amber-200 uppercase">
+        Stone Warrior Clash — Knight Charges Pawn
+      </span>
+      <button id="btn-skip-combat" type="button" class="pointer-events-auto obsidian-button px-3 py-1 rounded-full text-xs font-semibold tracking-wider uppercase">
+        Skip Clash ⏭
+      </button>
+    </div>
+  </div>
+
+  <!-- Top In-Game HUD -->
+  <header id="game-hud-top" class="hidden fixed top-0 inset-x-0 z-20 p-2.5 md:p-4 pointer-events-none flex flex-wrap items-center justify-between gap-2">
+    <!-- Left: Brand & Turn Status -->
+    <div class="pointer-events-auto obsidian-panel rounded-xl px-3.5 py-2 flex items-center gap-3">
+      <div class="flex items-center gap-2.5">
+        <div id="turn-gem" class="w-3.5 h-3.5 rounded-full bg-amber-200 shadow-[0_0_12px_#fde68a] border border-white"></div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="hud-turn-title" class="font-cinzel font-bold text-xs md:text-sm tracking-wider text-amber-100">WHITE'S COMMAND</span>
+            <span id="hud-mode-badge" class="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">VS AI (Medium)</span>
+          </div>
+          <p id="hud-status-sub" class="text-[11px] text-slate-300">Select a living stone warrior to command</p>
+        </div>
+      </div>
+      <!-- Check Alert Pill -->
+      <div id="hud-check-alert" class="hidden px-2.5 py-1 rounded-md bg-red-900/80 border border-red-400 text-red-100 font-cinzel text-xs font-bold tracking-widest uppercase animate-pulse">
+        ⚠ KING IN CHECK
+      </div>
+    </div>
+
+    <!-- Center: Dual Player Clocks & Captured Material -->
+    <div class="pointer-events-auto obsidian-panel rounded-xl px-3 py-1.5 flex items-center gap-3 md:gap-5">
+      <!-- White Army Status -->
+      <div class="flex items-center gap-2">
+        <div class="w-2.5 h-2.5 rounded-sm bg-slate-100 border border-amber-400"></div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-cinzel text-[11px] font-bold text-slate-100">ALABASTER</span>
+            <span id="white-clock" class="font-mono text-xs text-amber-300 font-semibold">10:00</span>
+          </div>
+          <div id="captured-by-white" class="text-[11px] leading-none h-3.5 text-sky-300 flex items-center gap-0.5" title="Black pieces shattered by White"></div>
+        </div>
+      </div>
+
+      <div class="h-6 w-px bg-amber-500/25"></div>
+
+      <!-- Black Army Status -->
+      <div class="flex items-center gap-2">
+        <div class="w-2.5 h-2.5 rounded-sm bg-sky-950 border border-sky-400"></div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-cinzel text-[11px] font-bold text-sky-200">OBSIDIAN</span>
+            <span id="black-clock" class="font-mono text-xs text-sky-300 font-semibold">10:00</span>
+          </div>
+          <div id="captured-by-black" class="text-[11px] leading-none h-3.5 text-amber-200 flex items-center gap-0.5" title="White pieces shattered by Black"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Action Controls -->
+    <div class="pointer-events-auto flex items-center gap-1.5 flex-wrap">
+      <button id="btn-camera-preset" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5" title="Cycle Camera Angle (C)">
+        <span>🎥</span>
+        <span id="camera-preset-label" class="hidden sm:inline">Commander View</span>
+      </button>
+      <button id="btn-flip-board" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium" title="Flip Board Perspective (F)">
+        🔄 Flip
+      </button>
+      <button id="btn-undo-move" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium" title="Undo Last Move (Z)">
+        ↩ Undo
+      </button>
+      <button id="btn-restart-game" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium" title="Restart Match">
+        ⚔ Restart
+      </button>
+      <button id="btn-toggle-history" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium lg:hidden" title="Toggle Chronicle">
+        📜 Log
+      </button>
+      <button id="btn-mute-audio" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium" title="Toggle Sound (M)">
+        🔊
+      </button>
+      <button id="btn-open-settings" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium" title="Settings">
+        ⚙
+      </button>
+      <button id="btn-exit-menu" type="button" class="obsidian-button px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-300" title="Return to Main Menu">
+        🏰 Menu
+      </button>
+    </div>
+  </header>
+
+  <!-- Left Bottom HUD: Selected Stone Warrior Lore & Tactical Inspector -->
+  <aside id="warrior-inspector" class="hidden fixed bottom-3 left-3 z-20 pointer-events-none max-w-xs">
+    <div class="pointer-events-auto obsidian-panel rounded-xl p-3.5 border border-amber-500/35">
+      <div class="flex items-center justify-between gap-2 mb-1">
+        <span id="inspector-piece-name" class="font-cinzel font-bold text-sm text-amber-200">Royal Stone Guardian</span>
+        <span id="inspector-square" class="font-mono text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-400/30">E1</span>
+      </div>
+      <p id="inspector-piece-desc" class="text-xs text-slate-300 leading-relaxed mb-2.5">
+        Ancient monarch carved from living granite. Commands the chamber with a two-handed royal broadsword.
+      </p>
+      <div class="flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-700/60 pt-2">
+        <span id="inspector-legal-count">Legal Destinations: 0</span>
+        <span class="text-amber-300/90">Drag or Click Tile</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Side HUD: Battle Chronicle (Move History & Combat Log) -->
+  <aside id="battle-chronicle" class="hidden fixed top-20 right-3 bottom-16 z-20 w-64 md:w-72 pointer-events-none flex flex-col">
+    <div class="pointer-events-auto obsidian-panel rounded-xl p-3 flex flex-col h-full">
+      <div class="flex items-center justify-between border-b border-amber-500/25 pb-2 mb-2">
+        <div class="flex items-center gap-1.5">
+          <span class="text-amber-400">📜</span>
+          <h2 class="font-cinzel font-bold text-xs tracking-wider uppercase text-amber-100">Battle Chronicle</h2>
+        </div>
+        <span id="move-counter-badge" class="text-[11px] font-mono text-slate-400">Move 1</span>
+      </div>
+
+      <!-- Algebraic Move Table -->
+      <div id="move-history-list" class="custom-scrollbar flex-1 overflow-y-auto pr-1 space-y-1 text-xs font-mono">
+        <div class="text-slate-500 italic text-center py-6 font-sans">The ancient stones await the first command...</div>
+      </div>
+
+      <!-- Recent Combat Feed -->
+      <div class="mt-2 pt-2 border-t border-amber-500/25">
+        <div class="flex items-center justify-between text-[11px] text-amber-300/90 mb-1">
+          <span class="font-cinzel uppercase tracking-wider">Chamber Telemetry</span>
+          <span id="fps-badge" class="font-mono text-[10px] text-emerald-400">60 FPS</span>
+        </div>
+        <p id="combat-feed-line" class="text-[11px] text-slate-300 truncate">
+          Torchlight flickers across the 64 carved tiles.
+        </p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Camera & Quick Controls Bar -->
+  <footer id="game-hud-bottom" class="hidden fixed bottom-3 inset-x-0 z-20 pointer-events-none flex justify-center px-4">
+    <div class="pointer-events-auto obsidian-panel rounded-full px-4 py-1.5 flex items-center gap-3 text-xs text-slate-300">
+      <button id="btn-cam-orbit-left" type="button" class="hover:text-amber-300 transition px-1" title="Orbit Left">⟲ Orbit L</button>
+      <span class="text-slate-600">|</span>
+      <button id="btn-cam-zoom-in" type="button" class="hover:text-amber-300 transition px-1" title="Zoom In">＋ Zoom</button>
+      <button id="btn-cam-zoom-out" type="button" class="hover:text-amber-300 transition px-1" title="Zoom Out">－ Zoom</button>
+      <span class="text-slate-600">|</span>
+      <button id="btn-cam-orbit-right" type="button" class="hover:text-amber-300 transition px-1" title="Orbit Right">Orbit R ⟳</button>
+      <span class="hidden md:inline text-slate-600">|</span>
+      <label class="hidden md:flex items-center gap-1.5 cursor-pointer text-[11px] text-amber-200">
+        <input id="chk-fast-combat" type="checkbox" class="accent-amber-500 rounded cursor-pointer" />
+        <span>Fast Combat</span>
+      </label>
+    </div>
+  </footer>
+
+  <!-- MAIN MENU OVERLAY ("THE ENCHANTED CHESS") -->
+  <section id="main-menu-modal" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/45 backdrop-blur-[3px] transition-opacity duration-500">
+    <div class="obsidian-panel rounded-2xl max-w-xl w-full p-6 md:p-8 border border-amber-500/40 relative overflow-hidden">
+      <!-- Decorative Corner Runes -->
+      <div class="absolute top-3 left-4 text-amber-500/30 font-cinzel text-lg select-none">ᚠ ᚢ ᚦ</div>
+      <div class="absolute top-3 right-4 text-amber-500/30 font-cinzel text-lg select-none">ᚨ ᚱ ᚲ</div>
+
+      <div class="text-center mb-6">
+        <p class="font-cinzel text-xs uppercase tracking-[0.35em] text-amber-400/90 mb-1">Trial of the Underground Chamber</p>
+        <h1 class="font-cinzel font-black text-3xl md:text-5xl gold-gradient-text tracking-wider mb-2">
+          THE ENCHANTED CHESS
+        </h1>
+        <p class="text-xs md:text-sm text-slate-300 max-w-md mx-auto">
+          Command colossal living stone warriors across an ancient Gothic battlefield where every capture triggers a cinematic clash.
+        </p>
+      </div>
+
+      <!-- AI & Player Configuration Strip -->
+      <div class="bg-slate-950/75 border border-amber-500/25 rounded-xl p-3.5 mb-5 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+        <div>
+          <label for="menu-select-difficulty" class="block font-cinzel text-[10px] uppercase tracking-wider text-amber-300 mb-1">AI Mastery</label>
+          <select id="menu-select-difficulty" class="w-full bg-slate-900 border border-amber-500/35 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-400">
+            <option value="easy">Easy — Novice Stone</option>
+            <option value="medium" selected>Medium — Castle Tactician</option>
+            <option value="hard">Hard — Grandmaster Archmage</option>
+          </select>
+        </div>
+        <div>
+          <label for="menu-select-color" class="block font-cinzel text-[10px] uppercase tracking-wider text-amber-300 mb-1">Your Army</label>
+          <select id="menu-select-color" class="w-full bg-slate-900 border border-amber-500/35 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-400">
+            <option value="w" selected>Alabaster Stone (White)</option>
+            <option value="b">Obsidian Marble (Black)</option>
+          </select>
+        </div>
+        <div>
+          <label for="menu-select-clock" class="block font-cinzel text-[10px] uppercase tracking-wider text-amber-300 mb-1">Time Control</label>
+          <select id="menu-select-clock" class="w-full bg-slate-900 border border-amber-500/35 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-400">
+            <option value="600" selected>10 Min Rapid</option>
+            <option value="300">5 Min Blitz</option>
+            <option value="900">15 Min Classical</option>
+            <option value="0">Untimed Immortal</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Main Menu Required Buttons -->
+      <div class="space-y-2.5">
+        <button id="btn-menu-start" type="button" class="w-full obsidian-button py-3.5 px-5 rounded-xl font-cinzel font-bold text-sm md:text-base tracking-widest uppercase flex items-center justify-between group">
+          <span class="flex items-center gap-3">
+            <span class="text-amber-400 text-lg">⚔</span>
+            <span>START GAME</span>
+          </span>
+          <span class="text-xs text-amber-300/80 group-hover:translate-x-1 transition-transform">Enter Chamber →</span>
+        </button>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button id="btn-menu-vs-ai" type="button" class="obsidian-button py-3 px-4 rounded-xl font-cinzel font-semibold text-xs md:text-sm tracking-wider uppercase flex items-center justify-center gap-2">
+            <span>🧙‍♂️</span>
+            <span>PLAY VS AI</span>
+          </button>
+          <button id="btn-menu-two-players" type="button" class="obsidian-button py-3 px-4 rounded-xl font-cinzel font-semibold text-xs md:text-sm tracking-wider uppercase flex items-center justify-center gap-2">
+            <span>👑</span>
+            <span>TWO PLAYERS</span>
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button id="btn-menu-settings" type="button" class="obsidian-button py-2.5 px-4 rounded-xl font-cinzel text-xs tracking-wider uppercase flex items-center justify-center gap-2">
+            <span>⚙</span>
+            <span>SETTINGS</span>
+          </button>
+          <button id="btn-menu-howto" type="button" class="obsidian-button py-2.5 px-4 rounded-xl font-cinzel text-xs tracking-wider uppercase flex items-center justify-center gap-2">
+            <span>📖</span>
+            <span>HOW TO PLAY</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-5 pt-3 border-t border-amber-500/20 flex items-center justify-between text-[11px] text-slate-400">
+        <button id="btn-replay-intro" type="button" class="hover:text-amber-300 underline decoration-amber-500/40">
+          🎬 Replay Opening Cinematic
+        </button>
+        <span>64 Tiles • 32 Living Stone Warriors</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PAWN PROMOTION MODAL -->
+  <div id="promotion-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="obsidian-panel rounded-2xl max-w-md w-full p-6 border border-amber-400/50 text-center">
+      <h2 class="font-cinzel font-bold text-xl gold-gradient-text tracking-wider mb-1">ASCENSION OF THE STONE SOLDIER</h2>
+      <p class="text-xs text-slate-300 mb-4">Your Pawn has reached the 8th rank. Choose the greater warrior form to awaken:</p>
+      <div class="grid grid-cols-2 gap-3">
+        <button type="button" data-promote="q" class="promote-choice obsidian-button p-3 rounded-xl flex flex-col items-center gap-1">
+          <span class="text-2xl">♛</span>
+          <span class="font-cinzel font-bold text-xs text-amber-200">QUEEN</span>
+          <span class="text-[10px] text-slate-400">Supreme Magical Warrior</span>
+        </button>
+        <button type="button" data-promote="r" class="promote-choice obsidian-button p-3 rounded-xl flex flex-col items-center gap-1">
+          <span class="text-2xl">♜</span>
+          <span class="font-cinzel font-bold text-xs text-amber-200">ROOK</span>
+          <span class="text-[10px] text-slate-400">Fortress Guardian</span>
+        </button>
+        <button type="button" data-promote="b" class="promote-choice obsidian-button p-3 rounded-xl flex flex-col items-center gap-1">
+          <span class="text-2xl">♝</span>
+          <span class="font-cinzel font-bold text-xs text-amber-200">BISHOP</span>
+          <span class="text-[10px] text-slate-400">Arcane Cleric</span>
+        </button>
+        <button type="button" data-promote="n" class="promote-choice obsidian-button p-3 rounded-xl flex flex-col items-center gap-1">
+          <span class="text-2xl">♞</span>
+          <span class="font-cinzel font-bold text-xs text-amber-200">KNIGHT</span>
+          <span class="text-[10px] text-slate-400">Armored Warhorse</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECKMATE / GAME OVER VICTORY MODAL -->
+  <div id="gameover-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm">
+    <div class="obsidian-panel rounded-2xl max-w-lg w-full p-7 border-2 border-amber-400/60 text-center shadow-[0_0_60px_rgba(212,175,55,0.3)]">
+      <p id="gameover-subtitle" class="font-cinzel text-xs uppercase tracking-[0.35em] text-amber-300 mb-1">THE ROYAL GUARDIAN KNEELS</p>
+      <h2 id="gameover-title" class="font-cinzel font-black text-4xl md:text-5xl gold-gradient-text tracking-widest mb-1">CHECKMATE</h2>
+      <h3 id="gameover-victory-banner" class="font-cinzel font-bold text-xl text-amber-100 tracking-widest mb-4">VICTORY</h3>
+      <p id="gameover-summary" class="text-sm text-slate-300 mb-6">
+        The Alabaster Army triumphs after 24 moves. The opposing King lowers his royal weapon in solemn surrender.
+      </p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button id="btn-gameover-play-again" type="button" class="obsidian-button py-3 px-5 rounded-xl font-cinzel font-bold text-sm tracking-widest uppercase">
+          ⚔ PLAY AGAIN
+        </button>
+        <button id="btn-gameover-main-menu" type="button" class="obsidian-button py-3 px-5 rounded-xl font-cinzel font-bold text-sm tracking-widest uppercase">
+          🏰 MAIN MENU
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS MODAL -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="obsidian-panel rounded-2xl max-w-md w-full p-6 border border-amber-500/40">
+      <div class="flex items-center justify-between border-b border-amber-500/25 pb-3 mb-4">
+        <h2 class="font-cinzel font-bold text-lg gold-gradient-text tracking-wider">CHAMBER SETTINGS</h2>
+        <button id="btn-close-settings" type="button" class="obsidian-button px-2.5 py-1 rounded-lg text-xs">✕</button>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label for="setting-graphics" class="block font-cinzel text-amber-200 uppercase tracking-wider mb-1">Graphics & Lighting Quality</label>
+          <select id="setting-graphics" class="w-full bg-slate-900 border border-amber-500/35 rounded-lg px-3 py-2 text-slate-100">
+            <option value="ultra" selected>Ultra — Shadows, Volumetric Beams & Full Debris</option>
+            <option value="high">High — Shadows & Dynamic Torches</option>
+            <option value="performance">Performance — 60 FPS Optimized</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="setting-combat-cam" class="block font-cinzel text-amber-200 uppercase tracking-wider mb-1">Cinematic Capture Sequence</label>
+          <select id="setting-combat-cam" class="w-full bg-slate-900 border border-amber-500/35 rounded-lg px-3 py-2 text-slate-100">
+            <option value="full" selected>Full Movie Director Camera & Slow-Mo Impact</option>
+            <option value="fast">Fast Tactical Combat (No Camera Cut)</option>
+            <option value="instant">Instant Capture (Skip Combat Animation)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="setting-volume" class="block font-cinzel text-amber-200 uppercase tracking-wider mb-1">
+            Master Volume (<span id="setting-volume-label">80%</span>)
+          </label>
+          <input id="setting-volume" type="range" min="0" max="100" value="80" class="w-full accent-amber-500 cursor-pointer" />
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-200">Castle Ambience & Wind Drone</span>
+            <input id="setting-ambience" type="checkbox" checked class="accent-amber-500 w-4 h-4" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-200">Dramatic Slow-Motion on Shatter</span>
+            <input id="setting-slowmo" type="checkbox" checked class="accent-amber-500 w-4 h-4" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-200">Auto-Rotate Camera in 2-Player Mode</span>
+            <input id="setting-autorotate" type="checkbox" checked class="accent-amber-500 w-4 h-4" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-slate-200">Reduced Motion & Screen Shake (Accessibility)</span>
+            <input id="setting-reduced-motion" type="checkbox" class="accent-amber-500 w-4 h-4" />
+          </label>
+        </div>
+      </div>
+
+      <div class="mt-6 flex justify-end">
+        <button id="btn-save-settings" type="button" class="obsidian-button px-5 py-2 rounded-xl font-cinzel font-bold text-xs tracking-wider uppercase">
+          Apply & Return
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HOW TO PLAY MODAL -->
+  <div id="howto-modal" class="hidden fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="obsidian-panel rounded-2xl max-w-2xl w-full p-6 border border-amber-500/40 max-h-[88vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-amber-500/25 pb-3 mb-4">
+        <h2 class="font-cinzel font-bold text-lg gold-gradient-text tracking-wider">CODEX OF THE LIVING STONE WARRIORS</h2>
+        <button id="btn-close-howto" type="button" class="obsidian-button px-2.5 py-1 rounded-lg text-xs">✕</button>
+      </div>
+
+      <div class="custom-scrollbar overflow-y-auto pr-2 space-y-4 text-xs text-slate-300 leading-relaxed">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20">
+            <h3 class="font-cinzel font-bold text-amber-300 mb-1">♟ PAWN — Stone Soldier</h3>
+            <p>Armored medieval infantry with sword and round shield. Marches with heavy footsteps and lunges with a decisive sword cleave on capture.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20">
+            <h3 class="font-cinzel font-bold text-amber-300 mb-1">♞ KNIGHT — Armored Horse Rider</h3>
+            <p>Barded warhorse with lance-wielding rider. Rears up and leaps over intervening warriors in a high arc, charging through targets on capture.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20">
+            <h3 class="font-cinzel font-bold text-amber-300 mb-1">♝ BISHOP — Magical Guardian</h3>
+            <p>Mystical stone cleric carrying an arcane orb staff. Glides diagonally on runic energy and channels a concentrated arcane beam that shatters foes.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20">
+            <h3 class="font-cinzel font-bold text-amber-300 mb-1">♜ ROOK — Fortress Guardian</h3>
+            <p>Colossal siege golem with crenellated shoulders and a two-handed warhammer. Shakes the chamber floor with every step and crushes targets into rubble.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20">
+            <h3 class="font-cinzel font-bold text-amber-300 mb-1">♛ QUEEN — Supreme Magical Warrior</h3>
+            <p>Crowned warrior-empress wielding sceptre and blade. Unleashes a dual golden-azure shockwave and devastating finisher strike.</p>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-amber-500/20">
+            <h3 class="font-cinzel font-bold text-amber-300 mb-1">♚ KING — Royal Stone Guardian</h3>
+            <p>Towering monarch holding a greatsword. Must be protected at all costs—when trapped in Checkmate, he kneels and lowers his royal blade.</p>
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-900/90 border border-sky-500/30">
+          <h3 class="font-cinzel font-bold text-sky-300 mb-1">🎮 Camera & Battlefield Controls</h3>
+          <ul class="list-disc list-inside space-y-1">
+            <li><strong>Select & Command:</strong> Click or tap any of your living stone warriors to illuminate legal destination runes (emerald/cyan rings for moves, crimson runes for captures), then click the target tile.</li>
+            <li><strong>Orbit & Zoom Camera:</strong> Left-drag on empty space or Right-drag anywhere to orbit around the Gothic chamber. Scroll wheel or pinch to zoom.</li>
+            <li><strong>Shortcuts:</strong> Press <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600">C</kbd> to cycle camera views, <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600">F</kbd> to flip perspective, <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600">Z</kbd> to undo, or <kbd class="px-1.5 py-0.5 bg-slate-800 rounded border border-slate-600">Space</kbd> to skip an active combat cutscene.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-amber-500/20 flex justify-end">
+        <button id="btn-howto-done" type="button" class="obsidian-button px-5 py-2 rounded-xl font-cinzel font-bold text-xs tracking-wider uppercase">
+          Understood
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. PROCEDURAL WEB AUDIO SYNTHESIZER (Castle Ambience, Stone & Combat SFX)
+    // =========================================================================
+    class WizardAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.ambienceGain = null;
+        this.isMuted = false;
+        this.volume = 0.8;
+        this.ambienceEnabled = true;
+        this.ambienceStarted = false;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          this.ctx = new AudioCtx();
+          this.masterGain = this.ctx.createGain();
+          this.masterGain.gain.value = this.isMuted ? 0 : this.volume;
+          this.masterGain.connect(this.ctx.destination);
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        if (!this.ambienceStarted && this.ambienceEnabled) {
+          this.startCastleAmbience();
+        }
+      }
+
+      setVolume(val) {
+        this.volume = Math.max(0, Math.min(1, val));
+        if (this.masterGain && !this.isMuted) {
+          this.masterGain.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.05);
+        }
+      }
+
+      toggleMute() {
+        this.isMuted = !this.isMuted;
+        if (this.masterGain && this.ctx) {
+          this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : this.volume, this.ctx.currentTime, 0.05);
+        }
+        return this.isMuted;
+      }
+
+      setAmbience(enabled) {
+        this.ambienceEnabled = enabled;
+        if (this.ambienceGain && this.ctx) {
+          this.ambienceGain.gain.setTargetAtTime(enabled ? 0.18 : 0, this.ctx.currentTime, 0.2);
+        } else if (enabled && this.ctx && !this.ambienceStarted) {
+          this.startCastleAmbience();
+        }
+      }
+
+      createNoiseBuffer(duration = 2.0) {
+        const sampleRate = this.ctx.sampleRate;
+        const length = sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, length, sampleRate);
+        const data = buffer.getChannelData(0);
+        let lastOut = 0.0;
+        for (let i = 0; i < length; i++) {
+          const white = Math.random() * 2 - 1;
+          data[i] = (lastOut + (0.02 * white)) / 1.02;
+          lastOut = data[i];
+          data[i] *= 3.2;
+        }
+        return buffer;
+      }
+
+      startCastleAmbience() {
+        if (!this.ctx || this.ambienceStarted) return;
+        this.ambienceStarted = true;
+        this.ambienceGain = this.ctx.createGain();
+        this.ambienceGain.gain.value = this.ambienceEnabled ? 0.16 : 0;
+        this.ambienceGain.connect(this.masterGain);
+
+        // Deep subterranean choral/cavern drone (D2 + A2 + F3 minor)
+        [73.42, 110.0, 146.83].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const filter = this.ctx.createBiquadFilter();
+          const oscGain = this.ctx.createGain();
+          osc.type = idx === 1 ? 'triangle' : 'sine';
+          osc.frequency.value = freq;
+          filter.type = 'lowpass';
+          filter.frequency.value = 240;
+          oscGain.gain.value = 0.12 / (idx + 1);
+          osc.connect(filter);
+          filter.connect(oscGain);
+          oscGain.connect(this.ambienceGain);
+          osc.start();
+        });
+
+        // Distant wind & torch crackle filtered pink/brown noise
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.createNoiseBuffer(4.0);
+        noise.loop = true;
+        const windFilter = this.ctx.createBiquadFilter();
+        windFilter.type = 'bandpass';
+        windFilter.frequency.value = 180;
+        windFilter.Q.value = 2.5;
+        const windGain = this.ctx.createGain();
+        windGain.gain.value = 0.15;
+        noise.connect(windFilter);
+        windFilter.connect(windGain);
+        windGain.connect(this.ambienceGain);
+        noise.start();
+      }
+
+      playSelectRune() {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(528, now);
+        osc.frequency.exponentialRampToValueAtTime(792, now + 0.18);
+        gain.gain.setValueAtTime(0.16, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.24);
+      }
+
+      playStoneStep(weight = 1.0) {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        // Heavy low thud
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        const baseFreq = Math.max(42, 95 / weight);
+        osc.frequency.setValueAtTime(baseFreq, now);
+        osc.frequency.exponentialRampToValueAtTime(24, now + 0.22);
+        gain.gain.setValueAtTime(0.32 * Math.min(1.4, weight), now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.26);
+
+        // Stone grit scrape
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = this.createNoiseBuffer(0.3);
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(420, now);
+        const nGain = this.ctx.createGain();
+        nGain.gain.setValueAtTime(0.14, now);
+        nGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+        noise.connect(filter);
+        filter.connect(nGain);
+        nGain.connect(this.masterGain);
+        noise.start(now);
+        noise.stop(now + 0.2);
+      }
+
+      playWeaponAttack(pieceType) {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        if (pieceType === 'b' || pieceType === 'q') {
+          // Arcane beam discharge
+          const osc = this.ctx.createOscillator();
+          const osc2 = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc2.type = 'sine';
+          osc.frequency.setValueAtTime(220, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.28);
+          osc2.frequency.setValueAtTime(440, now);
+          osc2.frequency.exponentialRampToValueAtTime(110, now + 0.35);
+          gain.gain.setValueAtTime(0.22, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+          osc.connect(gain);
+          osc2.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc2.start(now);
+          osc.stop(now + 0.4);
+          osc2.stop(now + 0.4);
+        } else {
+          // Metallic sword/lance/warhammer whoosh & clang
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(pieceType === 'r' ? 140 : 340, now);
+          osc.frequency.exponentialRampToValueAtTime(55, now + 0.25);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        }
+      }
+
+      playStoneShatter() {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        // 1. Sub-bass seismic explosion
+        const sub = this.ctx.createOscillator();
+        const subGain = this.ctx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(110, now);
+        sub.frequency.exponentialRampToValueAtTime(22, now + 0.65);
+        subGain.gain.setValueAtTime(0.55, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+        sub.connect(subGain);
+        subGain.connect(this.masterGain);
+        sub.start(now);
+        sub.stop(now + 0.72);
+
+        // 2. Crushing rock burst + cascading stone fragments
+        for (let i = 0; i < 6; i++) {
+          const delay = i * 0.065 + Math.random() * 0.04;
+          const noise = this.ctx.createBufferSource();
+          noise.buffer = this.createNoiseBuffer(0.45);
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(320 + i * 160, now + delay);
+          filter.Q.value = 1.4;
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(0.32 / (1 + i * 0.35), now + delay);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.32);
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.masterGain);
+          noise.start(now + delay);
+          noise.stop(now + delay + 0.35);
+        }
+      }
+
+      playCheckHorn() {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        [146.83, 220.0, 293.66].forEach((freq) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.value = 620;
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(0.01, now);
+          gain.gain.linearRampToValueAtTime(0.12, now + 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+          osc.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(now);
+          osc.stop(now + 0.9);
+        });
+      }
+
+      playCheckmateFanfare() {
+        this.init();
+        if (!this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        const notes = [146.83, 174.61, 220.0, 293.66, 349.23, 440.0];
+        notes.forEach((freq, idx) => {
+          const start = now + idx * 0.12;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, start);
+          gain.gain.setValueAtTime(0.16, start);
+          gain.gain.exponentialRampToValueAtTime(0.001, start + 1.6);
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+          osc.start(start);
+          osc.stop(start + 1.65);
+        });
+      }
+    }
+
+    const audioEngine = new WizardAudioEngine();
+
+    // =========================================================================
+    // 2. PROCEDURAL PBR MARBLE, CARVED STONE & RUNIC TEXTURE GENERATOR
+    // =========================================================================
+    function createMarbleTexture(isWhite) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+
+      // Base stone tone inspired by the reference photo (Alabaster White vs Prussian Blue-Obsidian)
+      ctx.fillStyle = isWhite ? '#d8dde6' : '#0f2537';
+      ctx.fillRect(0, 0, 256, 256);
+
+      // Subtle stone grain blocks
+      for (let i = 0; i < 900; i++) {
+        const x = Math.random() * 256;
+        const y = Math.random() * 256;
+        const r = Math.random() * 3.5;
+        ctx.fillStyle = isWhite
+          ? `rgba(90, 105, 125, ${Math.random() * 0.08})`
+          : `rgba(56, 189, 248, ${Math.random() * 0.06})`;
+        ctx.fillRect(x, y, r, r);
+      }
+
+      // Organic marble veins
+      for (let v = 0; v < 14; v++) {
+        ctx.beginPath();
+        let vx = Math.random() * 256;
+        let vy = Math.random() * 256;
+        ctx.moveTo(vx, vy);
+        for (let step = 0; step < 18; step++) {
+          vx += (Math.random() - 0.42) * 28;
+          vy += (Math.random() - 0.42) * 28;
+          ctx.lineTo(vx, vy);
+        }
+        ctx.strokeStyle = isWhite
+          ? `rgba(60, 75, 95, ${0.08 + Math.random() * 0.14})`
+          : `rgba(125, 211, 252, ${0.07 + Math.random() * 0.14})`;
+        ctx.lineWidth = 0.6 + Math.random() * 2.2;
+        ctx.stroke();
+      }
+
+      // Chiseled tile bevel border
+      ctx.strokeStyle = isWhite ? 'rgba(40, 50, 65, 0.35)' : 'rgba(5, 10, 18, 0.65)';
+      ctx.lineWidth = 6;
+      ctx.strokeRect(3, 3, 250, 250);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    function createStatueStoneTexture(isWhite) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = isWhite ? '#cfc8bc' : '#1b2636';
+      ctx.fillRect(0, 0, 256, 256);
+
+      for (let i = 0; i < 1400; i++) {
+        const x = Math.random() * 256;
+        const y = Math.random() * 256;
+        const size = 1 + Math.random() * 4;
+        ctx.fillStyle = isWhite
+          ? (Math.random() > 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(55,50,45,0.11)')
+          : (Math.random() > 0.5 ? 'rgba(148,163,184,0.09)' : 'rgba(5,8,15,0.18)');
+        ctx.fillRect(x, y, size, size);
+      }
+      // Chisel battle scars
+      for (let c = 0; c < 22; c++) {
+        ctx.beginPath();
+        const x = Math.random() * 256;
+        const y = Math.random() * 256;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() - 0.5) * 35, y + (Math.random() - 0.5) * 35);
+        ctx.strokeStyle = isWhite ? 'rgba(40,36,32,0.22)' : 'rgba(2,6,12,0.4)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // =========================================================================
+    // 3. WARRIOR LORE & PIECE METADATA
+    // =========================================================================
+    const WARRIOR_METADATA = {
+      p: {
+        title: 'Stone Soldier (Pawn)',
+        desc: 'Armored medieval infantry carrying a broadsword and round buckler shield. Advances with heavy stone footsteps and strikes with a decisive sword cleave.',
+        weight: 0.9,
+        symbolW: '♙',
+        symbolB: '♟'
+      },
+      n: {
+        title: 'Armored Horse Rider (Knight)',
+        desc: 'Colossal barded warhorse ridden by a lance-wielding knight. Rears and bounds over intervening warriors, crashing down with seismic force.',
+        weight: 1.35,
+        symbolW: '♘',
+        symbolB: '♞'
+      },
+      b: {
+        title: 'Magical Guardian (Bishop)',
+        desc: 'Mystical mitered stone guardian wielding an enchanted crystal crosier. Glides diagonally on arcane currents and channels a shattering beam.',
+        weight: 1.05,
+        symbolW: '♗',
+        symbolB: '♝'
+      },
+      r: {
+        title: 'Fortress Guardian (Rook)',
+        desc: 'Massive crenellated siege golem armed with a two-handed stone warhammer. Every ground-shaking step sends tremors through the chamber.',
+        weight: 1.75,
+        symbolW: '♖',
+        symbolB: '♜'
+      },
+      q: {
+        title: 'Supreme Magical Warrior (Queen)',
+        desc: 'Majestic crowned warrior-empress armored in ancient rune-carved stone. Commands both royal blade and devastating golden-azure energy.',
+        weight: 1.3,
+        symbolW: '♕',
+        symbolB: '♛'
+      },
+      k: {
+        title: 'Royal Stone Guardian (King)',
+        desc: 'Towering bearded stone monarch bearing an heirloom greatsword. If trapped in Checkmate, he kneels in solemn surrender.',
+        weight: 1.6,
+        symbolW: '♔',
+        symbolB: '♚'
+      }
+    };
+
+    // =========================================================================
+    // 4. ARTICULATED 3D LIVING STONE WARRIOR BUILDER
+    // =========================================================================
+    const sharedStoneTexWhite = createStatueStoneTexture(true);
+    const sharedStoneTexBlack = createStatueStoneTexture(false);
+
+    function createWarriorMaterials(color) {
+      const isWhite = color === 'w';
+      const stoneMat = new THREE.MeshStandardMaterial({
+        color: isWhite ? 0xdad4c8 : 0x1e293b,
+        map: isWhite ? sharedStoneTexWhite : sharedStoneTexBlack,
+        bumpMap: isWhite ? sharedStoneTexWhite : sharedStoneTexBlack,
+        bumpScale: 0.035,
+        roughness: isWhite ? 0.62 : 0.48,
+        metalness: isWhite ? 0.12 : 0.28
+      });
+
+      const armorTrimMat = new THREE.MeshStandardMaterial({
+        color: isWhite ? 0xb89758 : 0x475569,
+        roughness: 0.35,
+        metalness: 0.72
+      });
+
+      const weaponMat = new THREE.MeshStandardMaterial({
+        color: isWhite ? 0xe2e8f0 : 0x64748b,
+        roughness: 0.28,
+        metalness: 0.85
+      });
+
+      const runeMat = new THREE.MeshBasicMaterial({
+        color: isWhite ? 0xfbbf24 : 0x38bdf8
+      });
+
+      return { stoneMat, armorTrimMat, weaponMat, runeMat };
+    }
+
+    function buildStoneWarriorMesh(type, color) {
+      const root = new THREE.Group();
+      const bodyPivot = new THREE.Group();
+      root.add(bodyPivot);
+
+      const { stoneMat, armorTrimMat, weaponMat, runeMat } = createWarriorMaterials(color);
+
+      // 1. Octagonal Carved Stone Pedestal Base (shared across all warriors)
+      const baseGeo = new THREE.CylinderGeometry(0.38, 0.44, 0.16, 8);
+      const baseMesh = new THREE.Mesh(baseGeo, stoneMat);
+      baseMesh.position.y = 0.08;
+      baseMesh.castShadow = true;
+      baseMesh.receiveShadow = true;
+      bodyPivot.add(baseMesh);
+
+      const rimGeo = new THREE.CylinderGeometry(0.35, 0.38, 0.06, 8);
+      const rimMesh = new THREE.Mesh(rimGeo, armorTrimMat);
+      rimMesh.position.y = 0.18;
+      bodyPivot.add(rimMesh);
+
+      // Articulated limbs references for idle & combat animations
+      let headGroup = new THREE.Group();
+      let rightArmGroup = new THREE.Group();
+      let leftArmGroup = new THREE.Group();
+      let weaponPivot = new THREE.Group();
+      let specialOrb = null;
+
+      if (type === 'p') {
+        // PAWN — Crouched/Compact Armored Medieval Infantry Soldier with Sword & Shield
+        const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.27, 0.52, 8), stoneMat);
+        torso.position.y = 0.46;
+        torso.castShadow = true;
+        bodyPivot.add(torso);
+
+        // Pauldrons
+        const pauldronL = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), armorTrimMat);
+        pauldronL.position.set(-0.23, 0.65, 0);
+        const pauldronR = pauldronL.clone();
+        pauldronR.position.x = 0.23;
+        bodyPivot.add(pauldronL, pauldronR);
+
+        // Helmeted Head
+        headGroup.position.set(0, 0.82, 0);
+        const helm = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 10), stoneMat);
+        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.04, 10), armorTrimMat);
+        brim.position.y = -0.03;
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.025, 0.06), runeMat);
+        visor.position.set(0, 0.01, 0.15);
+        headGroup.add(helm, brim, visor);
+        bodyPivot.add(headGroup);
+
+        // Left Arm + Round Stone Shield
+        leftArmGroup.position.set(-0.24, 0.62, 0.05);
+        const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.05, 10), armorTrimMat);
+        shield.rotation.x = Math.PI / 2;
+        shield.rotation.z = 0.25;
+        shield.position.set(-0.06, -0.05, 0.16);
+        leftArmGroup.add(shield);
+        bodyPivot.add(leftArmGroup);
+
+        // Right Arm + Broadsword
+        rightArmGroup.position.set(0.25, 0.62, 0.04);
+        const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.3, 6), stoneMat);
+        armR.position.y = -0.1;
+        rightArmGroup.add(armR);
+
+        weaponPivot.position.set(0, -0.2, 0.1);
+        const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), armorTrimMat);
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.56, 0.02), weaponMat);
+        blade.position.y = 0.3;
+        weaponPivot.add(hilt, blade);
+        weaponPivot.rotation.x = 0.35;
+        rightArmGroup.add(weaponPivot);
+        bodyPivot.add(rightArmGroup);
+
+      } else if (type === 'n') {
+        // KNIGHT — Armored Warhorse & Mounted Lance Warrior
+        const horseBody = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.62), stoneMat);
+        horseBody.position.set(0, 0.52, -0.03);
+        horseBody.rotation.x = -0.22;
+        horseBody.castShadow = true;
+        bodyPivot.add(horseBody);
+
+        // Horse Neck & Armored Head (Head Group)
+        headGroup.position.set(0, 0.72, 0.2);
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.18, 0.42, 8), stoneMat);
+        neck.rotation.x = 0.45;
+        const snout = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.34), armorTrimMat);
+        snout.position.set(0, 0.18, 0.14);
+        snout.rotation.x = 0.35;
+        const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.03), runeMat);
+        eyeL.position.set(-0.09, 0.22, 0.18);
+        const eyeR = eyeL.clone();
+        eyeR.position.x = 0.09;
+        headGroup.add(neck, snout, eyeL, eyeR);
+        bodyPivot.add(headGroup);
+
+        // Mounted Rider Torso & Helm
+        const riderTorso = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.42, 8), stoneMat);
+        riderTorso.position.set(0, 0.86, -0.08);
+        const riderHelm = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.24, 8), armorTrimMat);
+        riderHelm.position.set(0, 1.16, -0.08);
+        bodyPivot.add(riderTorso, riderHelm);
+
+        // Right Arm + Heavy War Lance
+        rightArmGroup.position.set(0.22, 0.88, -0.05);
+        weaponPivot.position.set(0.04, 0, 0.1);
+        const lanceShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.045, 1.15, 8), weaponMat);
+        lanceShaft.rotation.x = Math.PI / 2 - 0.35;
+        lanceShaft.position.z = 0.32;
+        lanceShaft.position.y = 0.18;
+        weaponPivot.add(lanceShaft);
+        rightArmGroup.add(weaponPivot);
+        bodyPivot.add(rightArmGroup);
+
+      } else if (type === 'b') {
+        // BISHOP — Tall Mitered Mystical Stone Guardian with Enchanted Orb Staff
+        const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.34, 0.88, 10), stoneMat);
+        robe.position.y = 0.64;
+        robe.castShadow = true;
+        bodyPivot.add(robe);
+
+        const stole = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.26), armorTrimMat);
+        stole.position.y = 0.66;
+        bodyPivot.add(stole);
+
+        headGroup.position.set(0, 1.18, 0);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), stoneMat);
+        const miter = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.32, 6), armorTrimMat);
+        miter.position.y = 0.18;
+        const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.025, 0.05), runeMat);
+        eyes.position.set(0, 0.02, 0.13);
+        headGroup.add(head, miter, eyes);
+        bodyPivot.add(headGroup);
+
+        // Right Arm + Arcane Crosier Staff
+        rightArmGroup.position.set(0.24, 0.85, 0.06);
+        weaponPivot.position.set(0, -0.1, 0.08);
+        const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 1.25, 8), armorTrimMat);
+        staff.position.y = 0.25;
+        specialOrb = new THREE.Mesh(new THREE.OctahedronGeometry(0.11, 1), runeMat);
+        specialOrb.position.y = 0.92;
+        weaponPivot.add(staff, specialOrb);
+        rightArmGroup.add(weaponPivot);
+        bodyPivot.add(rightArmGroup);
+
+      } else if (type === 'r') {
+        // ROOK — Colossal Fortress Golem with Crenellated Turret Shoulders & Two-Handed Warhammer
+        const colossusTorso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.78, 0.42), stoneMat);
+        colossusTorso.position.y = 0.6;
+        colossusTorso.castShadow = true;
+        bodyPivot.add(colossusTorso);
+
+        // Crenellated Castle Battlement Shoulders
+        for (let i = -1; i <= 1; i++) {
+          const merlonL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.12), armorTrimMat);
+          merlonL.position.set(-0.28, 1.04, i * 0.14);
+          const merlonR = merlonL.clone();
+          merlonR.position.x = 0.28;
+          bodyPivot.add(merlonL, merlonR);
+        }
+
+        headGroup.position.set(0, 1.06, 0.04);
+        const helm = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.2, 0.26, 8), stoneMat);
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.035, 0.06), runeMat);
+        visor.position.set(0, 0.02, 0.17);
+        headGroup.add(helm, visor);
+        bodyPivot.add(headGroup);
+
+        // Giant Stone Warhammer
+        rightArmGroup.position.set(0.32, 0.85, 0.08);
+        weaponPivot.position.set(0, -0.12, 0.14);
+        const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.042, 1.05, 8), armorTrimMat);
+        handle.position.y = 0.22;
+        const hammerHead = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.44), weaponMat);
+        hammerHead.position.y = 0.74;
+        weaponPivot.add(handle, hammerHead);
+        rightArmGroup.add(weaponPivot);
+        bodyPivot.add(rightArmGroup);
+
+      } else if (type === 'q') {
+        // QUEEN — Supreme Magical Warrior-Empress with Crown, Winged Pauldrons & Royal Sceptre-Blade
+        const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.37, 0.98, 12), stoneMat);
+        skirt.position.y = 0.68;
+        skirt.castShadow = true;
+        bodyPivot.add(skirt);
+
+        const bodice = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.18, 0.42, 10), armorTrimMat);
+        bodice.position.y = 1.02;
+        bodyPivot.add(bodice);
+
+        // Winged Pauldrons
+        const wingL = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.36, 5), armorTrimMat);
+        wingL.position.set(-0.26, 1.18, -0.04);
+        wingL.rotation.z = 0.55;
+        const wingR = wingL.clone();
+        wingR.position.x = 0.26;
+        wingR.rotation.z = -0.55;
+        bodyPivot.add(wingL, wingR);
+
+        headGroup.position.set(0, 1.34, 0);
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 12), stoneMat);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.13, 0.14, 8, 1, true), weaponMat);
+        crown.position.y = 0.12;
+        const haloRune = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.015, 6, 16), runeMat);
+        haloRune.position.set(0, 0.08, -0.06);
+        specialOrb = haloRune;
+        headGroup.add(head, crown, haloRune);
+        bodyPivot.add(headGroup);
+
+        // Right Arm + Royal Sceptre Blade
+        rightArmGroup.position.set(0.25, 1.05, 0.06);
+        weaponPivot.position.set(0, -0.1, 0.1);
+        const sceptreShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.25, 8), armorTrimMat);
+        sceptreShaft.position.y = 0.25;
+        const sceptreBlade = new THREE.Mesh(new THREE.OctahedronGeometry(0.13, 0), runeMat);
+        sceptreBlade.scale.set(0.7, 1.8, 0.4);
+        sceptreBlade.position.y = 0.92;
+        weaponPivot.add(sceptreShaft, sceptreBlade);
+        rightArmGroup.add(weaponPivot);
+        bodyPivot.add(rightArmGroup);
+
+      } else if (type === 'k') {
+        // KING — Towering Royal Stone Guardian with Imperial Crown & Two-Handed Greatsword
+        const royalRobe = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.39, 1.08, 10), stoneMat);
+        royalRobe.position.y = 0.72;
+        royalRobe.castShadow = true;
+        bodyPivot.add(royalRobe);
+
+        const mantle = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.28, 0.38), armorTrimMat);
+        mantle.position.y = 1.15;
+        bodyPivot.add(mantle);
+
+        headGroup.position.set(0, 1.44, 0);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.28, 0.24), stoneMat);
+        const crown = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.18, 8), armorTrimMat);
+        crown.position.y = 0.2;
+        const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), weaponMat);
+        crossV.position.y = 0.34;
+        const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.04), weaponMat);
+        crossH.position.y = 0.34;
+        const eyes = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.03, 0.04), runeMat);
+        eyes.position.set(0, 0.03, 0.12);
+        headGroup.add(head, crown, crossV, crossH, eyes);
+        bodyPivot.add(headGroup);
+
+        // Two-Handed Royal Greatsword held in front
+        rightArmGroup.position.set(0, 1.05, 0.24);
+        weaponPivot.position.set(0, 0, 0);
+        const guard = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.045, 0.06), armorTrimMat);
+        const greatBlade = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.92, 0.025), weaponMat);
+        greatBlade.position.y = -0.44;
+        const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), runeMat);
+        pommel.position.y = 0.16;
+        weaponPivot.add(guard, greatBlade, pommel);
+        rightArmGroup.add(weaponPivot);
+        bodyPivot.add(rightArmGroup);
+      }
+
+      // Face Black warriors +Z (toward White) and White warriors -Z (toward Black)
+      root.rotation.y = color === 'w' ? Math.PI : 0;
+
+      root.userData = {
+        type,
+        color,
+        bodyPivot,
+        headGroup,
+        rightArmGroup,
+        leftArmGroup,
+        weaponPivot,
+        specialOrb,
+        stoneMat,
+        runeMat,
+        idlePhase: Math.random() * Math.PI * 2,
+        isKneeling: false,
+        isVictoryPose: false
+      };
+
+      return root;
+    }
+
+    // =========================================================================
+    // 5. MAIN 3D SCENE, GOTHIC CHAMBER, 8x8 BOARD & SHATTER PHYSICS SYSTEM
+    // =========================================================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x060b16, 0.028);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 160);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.12;
+    container.appendChild(renderer.domElement);
+
+    // Lighting Setup (Cold Moonlight + Warm Flickering Torches)
+    const ambientLight = new THREE.AmbientLight(0x1e293b, 0.85);
+    scene.add(ambientLight);
+
+    const moonLight = new THREE.DirectionalLight(0x7dd3fc, 1.45);
+    moonLight.position.set(12, 24, 10);
+    moonLight.castShadow = true;
+    moonLight.shadow.mapSize.width = 2048;
+    moonLight.shadow.mapSize.height = 2048;
+    moonLight.shadow.camera.near = 2;
+    moonLight.shadow.camera.far = 55;
+    const d = 9.5;
+    moonLight.shadow.camera.left = -d;
+    moonLight.shadow.camera.right = d;
+    moonLight.shadow.camera.top = d;
+    moonLight.shadow.camera.bottom = -d;
+    moonLight.shadow.bias = -0.0005;
+    scene.add(moonLight);
+
+    // Dramatic Spotlight over the center of the board
+    const chamberSpot = new THREE.SpotLight(0xbae6fd, 1.3, 45, Math.PI / 3.2, 0.65, 1.5);
+    chamberSpot.position.set(0, 18, 0);
+    scene.add(chamberSpot);
+
+    // Check / Combat Dramatic Accent Light
+    const dramaticLight = new THREE.PointLight(0xf59e0b, 0, 14);
+    dramaticLight.position.set(0, 4, 0);
+    scene.add(dramaticLight);
+
+    // Build the Monumental 8x8 Chessboard & Gothic Chamber
+    const TILE_SIZE = 1.25;
+    const BOARD_OFFSET = (8 * TILE_SIZE) / 2 - TILE_SIZE / 2; // 4.375
+    const boardGroup = new THREE.Group();
+    scene.add(boardGroup);
+
+    const whiteTileTex = createMarbleTexture(true);
+    const blackTileTex = createMarbleTexture(false);
+    const whiteTileMat = new THREE.MeshStandardMaterial({
+      map: whiteTileTex,
+      bumpMap: whiteTileTex,
+      bumpScale: 0.015,
+      roughness: 0.28,
+      metalness: 0.15
+    });
+    const blackTileMat = new THREE.MeshStandardMaterial({
+      map: blackTileTex,
+      bumpMap: blackTileTex,
+      bumpScale: 0.015,
+      roughness: 0.22,
+      metalness: 0.25
+    });
+
+    const tileMeshes = {}; // square (e.g. 'e4') -> Mesh
+    const tileHighlightMeshes = {}; // square -> Overlay highlight Group
+    const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+    function squareToWorld(sq) {
+      const fileIdx = FILES.indexOf(sq[0]);
+      const rankIdx = parseInt(sq[1], 10) - 1;
+      const x = (fileIdx - 3.5) * TILE_SIZE;
+      const z = (3.5 - rankIdx) * TILE_SIZE;
+      return new THREE.Vector3(x, 0, z);
+    }
+
+    // Create 64 Individual Stone Tiles + Magical Highlight Rings
+    const tileGeo = new THREE.BoxGeometry(TILE_SIZE * 0.985, 0.28, TILE_SIZE * 0.985);
+    for (let r = 0; r < 8; r++) {
+      for (let f = 0; f < 8; f++) {
+        const sq = FILES[f] + (r + 1);
+        const isLight = (r + f) % 2 === 1;
+        const tile = new THREE.Mesh(tileGeo, isLight ? whiteTileMat : blackTileMat);
+        const pos = squareToWorld(sq);
+        tile.position.set(pos.x, -0.14, pos.z);
+        tile.receiveShadow = true;
+        tile.userData = { square: sq, isTile: true };
+        boardGroup.add(tile);
+        tileMeshes[sq] = tile;
+
+        // Magical Rune Indicator Overlay on each tile
+        const hlGroup = new THREE.Group();
+        hlGroup.position.set(pos.x, 0.012, pos.z);
+        hlGroup.visible = false;
+
+        const ringGeo = new THREE.RingGeometry(0.32, 0.46, 24);
+        ringGeo.rotateX(-Math.PI / 2);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85
+        });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+
+        const innerDiscGeo = new THREE.CircleGeometry(0.22, 20);
+        innerDiscGeo.rotateX(-Math.PI / 2);
+        const innerDiscMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8,
+          transparent: true,
+          opacity: 0.35
+        });
+        const innerDisc = new THREE.Mesh(innerDiscGeo, innerDiscMat);
+
+        hlGroup.add(ringMesh, innerDisc);
+        hlGroup.userData = { ringMesh, innerDisc, ringMat, innerDiscMat, mode: 'none' };
+        boardGroup.add(hlGroup);
+        tileHighlightMeshes[sq] = hlGroup;
+      }
+    }
+
+    // Monumental Carved Stone Pedestal & Glowing Runic Frame around the 8x8 Board
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: 0x111827,
+      roughness: 0.55,
+      metalness: 0.45
+    });
+    const frameBase = new THREE.Mesh(new THREE.BoxGeometry(11.4, 0.48, 11.4), frameMat);
+    frameBase.position.y = -0.26;
+    frameBase.receiveShadow = true;
+    boardGroup.add(frameBase);
+
+    const runeBorderMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      transparent: true,
+      opacity: 0.42
+    });
+    const runeStripN = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 0.12), runeBorderMat);
+    runeStripN.rotation.x = -Math.PI / 2;
+    runeStripN.position.set(0, 0.005, -5.25);
+    const runeStripS = runeStripN.clone();
+    runeStripS.position.z = 5.25;
+    const runeStripE = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 10.4), runeBorderMat);
+    runeStripE.rotation.x = -Math.PI / 2;
+    runeStripE.position.set(5.25, 0.005, 0);
+    const runeStripW = runeStripE.clone();
+    runeStripW.position.x = -5.25;
+    boardGroup.add(runeStripN, runeStripS, runeStripE, runeStripW);
+
+    // Build the Enormous Medieval Castle Chamber Environment
+    const castleGroup = new THREE.Group();
+    scene.add(castleGroup);
+
+    // Reflective Dark Polished Castle Floor
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x090d16,
+      roughness: 0.32,
+      metalness: 0.45
+    });
+    const castleFloor = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), floorMat);
+    castleFloor.rotation.x = -Math.PI / 2;
+    castleFloor.position.y = -0.5;
+    castleFloor.receiveShadow = true;
+    castleGroup.add(castleFloor);
+
+    // 8 Flickering Fire Braziers / Torches surrounding the Chessboard (matching reference photo!)
+    const torchLights = [];
+    const torchFlames = [];
+    const brazierPositions = [
+      [-5.6, -3.5], [-5.6, 3.5],
+      [5.6, -3.5], [5.6, 3.5],
+      [-3.5, -5.6], [3.5, -5.6],
+      [-3.5, 5.6], [3.5, 5.6]
+    ];
+    brazierPositions.forEach(([bx, bz], idx) => {
+      const stand = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.24, 0.34, 0.75, 8),
+        new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.6, metalness: 0.7 })
+      );
+      stand.position.set(bx, -0.12, bz);
+      castleGroup.add(stand);
+
+      const flameGeo = new THREE.ConeGeometry(0.22, 0.58, 7);
+      const flameMat = new THREE.MeshBasicMaterial({ color: 0xff9d2e });
+      const flame = new THREE.Mesh(flameGeo, flameMat);
+      flame.position.set(bx, 0.48, bz);
+      castleGroup.add(flame);
+      torchFlames.push({ mesh: flame, baseX: bx, baseZ: bz, phase: idx * 1.3 });
+
+      // Create point lights on the 4 corner braziers for realistic warm torch illumination
+      if (idx < 4) {
+        const tLight = new THREE.PointLight(0xff7b1c, 1.35, 13, 1.8);
+        tLight.position.set(bx, 1.1, bz);
+        castleGroup.add(tLight);
+        torchLights.push({ light: tLight, phase: idx * 2.1 });
+      }
+    });
+
+    // Surrounding Piles of Shattered Ancient Stone Warriors (Environmental Storytelling from reference image)
+    const rubbleMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.78, metalness: 0.15 });
+    for (let i = 0; i < 68; i++) {
+      const angle = (i / 68) * Math.PI * 2;
+      const radius = 6.8 + Math.random() * 4.5;
+      const rx = Math.cos(angle) * radius;
+      const rz = Math.sin(angle) * radius;
+      const size = 0.22 + Math.random() * 0.52;
+      const chunk = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rubbleMat);
+      chunk.position.set(rx, -0.35 + size * 0.4, rz);
+      chunk.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      chunk.scale.set(1, 0.6 + Math.random() * 0.7, 1);
+      castleGroup.add(chunk);
+    }
+
+    // Towering Gothic Stone Columns & Pointed Arches around the Great Hall
+    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.75, metalness: 0.2 });
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      const px = Math.cos(angle) * 16.5;
+      const pz = Math.sin(angle) * 16.5;
+      const columnGroup = new THREE.Group();
+      columnGroup.position.set(px, -0.5, pz);
+      columnGroup.lookAt(0, -0.5, 0);
+
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.9, 18, 10), pillarMat);
+      shaft.position.y = 9;
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.1, 1.2, 2.1), pillarMat);
+      plinth.position.y = 0.6;
+      columnGroup.add(shaft, plinth);
+      castleGroup.add(columnGroup);
+    }
+
+    // Volumetric Moonlight God-Rays (Translucent shafts entering from high Gothic windows)
+    const rayGeo = new THREE.ConeGeometry(4.5, 22, 16, 1, true);
+    const rayMat = new THREE.MeshBasicMaterial({
+      color: 0x7dd3fc,
+      transparent: true,
+      opacity: 0.045,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    for (let i = 0; i < 3; i++) {
+      const ray = new THREE.Mesh(rayGeo, rayMat);
+      ray.position.set(4 - i * 4, 10, -3 + i * 2.5);
+      ray.rotation.z = 0.38;
+      ray.rotation.x = 0.18;
+      castleGroup.add(ray);
+    }
+
+    // Floating Magical Dust & Embers Particle System
+    const DUST_COUNT = 260;
+    const dustGeo = new THREE.BufferGeometry();
+    const dustPositions = new Float32Array(DUST_COUNT * 3);
+    for (let i = 0; i < DUST_COUNT; i++) {
+      dustPositions[i * 3] = (Math.random() - 0.5) * 24;
+      dustPositions[i * 3 + 1] = Math.random() * 11;
+      dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 24;
+    }
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+    const dustMat = new THREE.PointsMaterial({
+      color: 0xbae6fd,
+      size: 0.085,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending
+    });
+    const dustParticles = new THREE.Points(dustGeo, dustMat);
+    scene.add(dustParticles);
+
+    // =========================================================================
+    // 6. PHYSICS STONE SHATTERING & COMBAT PARTICLE SYSTEM
+    // =========================================================================
+    const activeDebris = []; // { mesh, vel, rotVel, life, maxLife }
+
+    function spawnStoneDestruction(worldPos, pieceColor, reducedMotion = false) {
+      const isWhite = pieceColor === 'w';
+      const fragCount = reducedMotion ? 14 : 36;
+      const fragMat = new THREE.MeshStandardMaterial({
+        color: isWhite ? 0xdad4c8 : 0x1e293b,
+        roughness: 0.65,
+        metalness: 0.2
+      });
+      const sparkMat = new THREE.MeshBasicMaterial({
+        color: isWhite ? 0xfbbf24 : 0x38bdf8
+      });
+
+      for (let i = 0; i < fragCount; i++) {
+        const isSpark = i % 5 === 0;
+        const radius = isSpark ? 0.055 : (0.07 + Math.random() * 0.14);
+        const geo = new THREE.DodecahedronGeometry(radius, 0);
+        const mesh = new THREE.Mesh(geo, isSpark ? sparkMat : fragMat);
+        mesh.position.set(
+          worldPos.x + (Math.random() - 0.5) * 0.45,
+          0.35 + Math.random() * 0.85,
+          worldPos.z + (Math.random() - 0.5) * 0.45
+        );
+        mesh.scale.set(
+          0.7 + Math.random() * 0.8,
+          0.5 + Math.random() * 0.9,
+          0.7 + Math.random() * 0.8
+        );
+        mesh.castShadow = true;
+        scene.add(mesh);
+
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1.6 + Math.random() * 3.8;
+        activeDebris.push({
+          mesh,
+          vel: new THREE.Vector3(
+            Math.cos(angle) * speed,
+            2.2 + Math.random() * 3.6,
+            Math.sin(angle) * speed
+          ),
+          rotVel: new THREE.Vector3(
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 10,
+            (Math.random() - 0.5) * 10
+          ),
+          life: 0,
+          maxLife: 2.6 + Math.random() * 1.2
+        });
+      }
+    }
+
+    function updateDebrisPhysics(dt) {
+      for (let i = activeDebris.length - 1; i >= 0; i--) {
+        const d = activeDebris[i];
+        d.life += dt;
+        if (d.life >= d.maxLife) {
+          scene.remove(d.mesh);
+          d.mesh.geometry.dispose();
+          activeDebris.splice(i, 1);
+          continue;
+        }
+        // Gravity
+        d.vel.y -= 9.8 * dt;
+        d.mesh.position.addScaledVector(d.vel, dt);
+        d.mesh.rotation.x += d.rotVel.x * dt;
+        d.mesh.rotation.y += d.rotVel.y * dt;
+        d.mesh.rotation.z += d.rotVel.z * dt;
+
+        // Bounce on chessboard surface (y = 0.04)
+        if (d.mesh.position.y < 0.04) {
+          d.mesh.position.y = 0.04;
+          d.vel.y = -d.vel.y * 0.36;
+          d.vel.x *= 0.72;
+          d.vel.z *= 0.72;
+          d.rotVel.multiplyScalar(0.7);
+        }
+        // Fade out near end
+        if (d.life > d.maxLife - 0.6) {
+          const s = Math.max(0.01, (d.maxLife - d.life) / 0.6);
+          d.mesh.scale.setScalar(s);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 7. INTELLIGENT ORBITAL & CINEMATIC DIRECTOR CAMERA CONTROLLER
+    // =========================================================================
+    class CameraDirector {
+      constructor(cam, domElem) {
+        this.camera = cam;
+        this.domElement = domElem;
+        this.target = new THREE.Vector3(0, 0.5, 0);
+        this.spherical = { radius: 11.8, phi: 0.92, theta: 0 };
+        this.desiredSpherical = { radius: 11.8, phi: 0.92, theta: 0 };
+        this.desiredTarget = new THREE.Vector3(0, 0.5, 0);
+        this.isCinematicOverride = false;
+        this.cinematicPos = new THREE.Vector3();
+        this.cinematicLookAt = new THREE.Vector3();
+        this.shakeIntensity = 0;
+        this.presetIndex = 0;
+        this.presets = [
+          { name: 'Commander View', phi: 0.92, radius: 11.8 },
+          { name: 'High Tactician', phi: 0.42, radius: 13.2 },
+          { name: 'Heroic Low Angle', phi: 1.18, radius: 10.2 }
+        ];
+        this.initInputHandlers();
+      }
+
+      initInputHandlers() {
+        let isDragging = false;
+        let prevX = 0;
+        let prevY = 0;
+
+        this.domElement.addEventListener('pointerdown', (e) => {
+          if (e.button === 2 || e.button === 0) {
+            isDragging = true;
+            prevX = e.clientX;
+            prevY = e.clientY;
+          }
+        });
+
+        window.addEventListener('pointermove', (e) => {
+          if (!isDragging || this.isCinematicOverride) return;
+          const dx = e.clientX - prevX;
+          const dy = e.clientY - prevY;
+          if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+            window._cameraDraggedRecently = true;
+          }
+          prevX = e.clientX;
+          prevY = e.clientY;
+          this.desiredSpherical.theta -= dx * 0.0065;
+          this.desiredSpherical.phi = Math.max(0.28, Math.min(1.32, this.desiredSpherical.phi - dy * 0.0055));
+        });
+
+        window.addEventListener('pointerup', () => {
+          isDragging = false;
+          setTimeout(() => { window._cameraDraggedRecently = false; }, 60);
+        });
+
+        this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+        this.domElement.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          if (this.isCinematicOverride) return;
+          this.desiredSpherical.radius = Math.max(6.5, Math.min(18.5, this.desiredSpherical.radius + e.deltaY * 0.008));
+        }, { passive: false });
+      }
+
+      setPlayerPerspective(color) {
+        this.desiredSpherical.theta = color === 'w' ? 0 : Math.PI;
+        this.desiredTarget.set(0, 0.5, 0);
+      }
+
+      cyclePreset() {
+        this.presetIndex = (this.presetIndex + 1) % this.presets.length;
+        const p = this.presets[this.presetIndex];
+        this.desiredSpherical.phi = p.phi;
+        this.desiredSpherical.radius = p.radius;
+        return p.name;
+      }
+
+      triggerShake(amount = 0.22) {
+        if (gameSettings.reducedMotion) return;
+        this.shakeIntensity = amount;
+      }
+
+      update(dt) {
+        if (this.isCinematicOverride) {
+          this.camera.position.copy(this.cinematicPos);
+          if (this.shakeIntensity > 0.001) {
+            this.camera.position.x += (Math.random() - 0.5) * this.shakeIntensity;
+            this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity;
+            this.shakeIntensity *= 0.88;
+          }
+          this.camera.lookAt(this.cinematicLookAt);
+          return;
+        }
+
+        // Smooth orbital interpolation
+        const lerpFactor = Math.min(1, dt * 6.5);
+        this.spherical.radius += (this.desiredSpherical.radius - this.spherical.radius) * lerpFactor;
+        this.spherical.phi += (this.desiredSpherical.phi - this.spherical.phi) * lerpFactor;
+
+        // Shortest angle interpolation for theta
+        let diff = this.desiredSpherical.theta - this.spherical.theta;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        this.spherical.theta += diff * lerpFactor;
+
+        this.target.lerp(this.desiredTarget, lerpFactor);
+
+        const sinPhi = Math.sin(this.spherical.phi);
+        const x = this.target.x + this.spherical.radius * sinPhi * Math.sin(this.spherical.theta);
+        const y = Math.max(1.2, this.target.y + this.spherical.radius * Math.cos(this.spherical.phi));
+        const z = this.target.z + this.spherical.radius * sinPhi * Math.cos(this.spherical.theta);
+
+        this.camera.position.set(x, y, z);
+        if (this.shakeIntensity > 0.001) {
+          this.camera.position.x += (Math.random() - 0.5) * this.shakeIntensity;
+          this.camera.position.y += (Math.random() - 0.5) * this.shakeIntensity;
+          this.shakeIntensity *= 0.88;
+        }
+        this.camera.lookAt(this.target);
+      }
+    }
+
+    const cameraDirector = new CameraDirector(camera, renderer.domElement);
+
+    // =========================================================================
+    // 8. CHESS LOGIC ENGINE + MINIMAX ALPHA-BETA AI OPPONENT
+    // =========================================================================
+    let chess = new Chess();
+    const pieceMeshes = {}; // square -> THREE.Group warrior
+
+    const gameSettings = {
+      mode: 'ai', // 'ai' or 'pvp'
+      aiDifficulty: 'medium', // 'easy', 'medium', 'hard'
+      humanColor: 'w',
+      clockSeconds: 600,
+      graphicsQuality: 'ultra',
+      combatCameraMode: 'full', // 'full', 'fast', 'instant'
+      slowMoImpact: true,
+      autoRotatePvP: true,
+      reducedMotion: false
+    };
+
+    let selectedSquare = null;
+    let legalMovesForSelected = [];
+    let pendingPromotionMove = null;
+    let isAnimatingAction = false;
+    let skipCurrentCombatRequested = false;
+    let whiteTimeLeft = 600;
+    let blackTimeLeft = 600;
+    let clockInterval = null;
+    let isGameActive = false;
+    let isOpeningIntroActive = true;
+
+    // Positional Piece-Square Tables for Strategic AI Evaluation
+    const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+    const PAWN_PST = [
+      [0,  0,  0,  0,  0,  0,  0,  0],
+      [50, 50, 50, 50, 50, 50, 50, 50],
+      [10, 10, 20, 30, 30, 20, 10, 10],
+      [5,  5, 10, 25, 25, 10,  5,  5],
+      [0,  0,  0, 20, 20,  0,  0,  0],
+      [5, -5,-10,  0,  0,-10, -5,  5],
+      [5, 10, 10,-20,-20, 10, 10,  5],
+      [0,  0,  0,  0,  0,  0,  0,  0]
+    ];
+    const KNIGHT_PST = [
+      [-50,-40,-30,-30,-30,-30,-40,-50],
+      [-40,-20,  0,  0,  0,  0,-20,-40],
+      [-30,  0, 10, 15, 15, 10,  0,-30],
+      [-30,  5, 15, 20, 20, 15,  5,-30],
+      [-30,  0, 15, 20, 20, 15,  0,-30],
+      [-30,  5, 10, 15, 15, 10,  5,-30],
+      [-40,-20,  0,  5,  5,  0,-20,-40],
+      [-50,-40,-30,-30,-30,-30,-40,-50]
+    ];
+
+    function evaluateBoardState(gameInstance) {
+      if (gameInstance.in_checkmate()) {
+        return gameInstance.turn() === 'w' ? -99999 : 99999;
+      }
+      if (gameInstance.in_draw() || gameInstance.in_stalemate() || gameInstance.in_threefold_repetition()) {
+        return 0;
+      }
+      const board = gameInstance.board();
+      let score = 0;
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (!piece) continue;
+          let val = PIECE_VALUES[piece.type] || 0;
+          const rowIdx = piece.color === 'w' ? r : 7 - r;
+          if (piece.type === 'p') val += PAWN_PST[rowIdx][c];
+          else if (piece.type === 'n' || piece.type === 'b') val += KNIGHT_PST[rowIdx][c];
+          score += piece.color === 'w' ? val : -val;
+        }
+      }
+      return score;
+    }
+
+    function computeBestAIMove() {
+      const moves = chess.moves({ verbose: true });
+      if (moves.length === 0) return null;
+
+      // Easy mode: occasional tactical capture or random legal move
+      if (gameSettings.aiDifficulty === 'easy') {
+        const captures = moves.filter(m => m.captured);
+        if (captures.length > 0 && Math.random() < 0.55) {
+          return captures[Math.floor(Math.random() * captures.length)];
+        }
+        return moves[Math.floor(Math.random() * moves.length)];
+      }
+
+      const depth = gameSettings.aiDifficulty === 'hard' ? 3 : 2;
+      const isMaximizing = chess.turn() === 'w';
+
+      // Sort captures first for faster alpha-beta pruning
+      moves.sort((a, b) => (b.captured ? 10 : 0) - (a.captured ? 10 : 0));
+
+      let bestMove = moves[0];
+      let bestValue = isMaximizing ? -Infinity : Infinity;
+
+      function minimax(d, alpha, beta, maxPlayer) {
+        if (d === 0 || chess.game_over()) {
+          return evaluateBoardState(chess);
+        }
+        const legal = chess.moves({ verbose: true });
+        legal.sort((a, b) => (b.captured ? 10 : 0) - (a.captured ? 10 : 0));
+
+        if (maxPlayer) {
+          let maxEval = -Infinity;
+          for (let i = 0; i < legal.length; i++) {
+            chess.move(legal[i]);
+            const ev = minimax(d - 1, alpha, beta, false);
+            chess.undo();
+            if (ev > maxEval) maxEval = ev;
+            if (ev > alpha) alpha = ev;
+            if (beta <= alpha) break;
+          }
+          return maxEval;
+        } else {
+          let minEval = Infinity;
+          for (let i = 0; i < legal.length; i++) {
+            chess.move(legal[i]);
+            const ev = minimax(d - 1, alpha, beta, true);
+            chess.undo();
+            if (ev < minEval) minEval = ev;
+            if (ev < beta) beta = ev;
+            if (beta <= alpha) break;
+          }
+          return minEval;
+        }
+      }
+
+      for (let i = 0; i < moves.length; i++) {
+        chess.move(moves[i]);
+        const val = minimax(depth - 1, -Infinity, Infinity, !isMaximizing);
+        chess.undo();
+        if (isMaximizing && val > bestValue) {
+          bestValue = val;
+          bestMove = moves[i];
+        } else if (!isMaximizing && val < bestValue) {
+          bestValue = val;
+          bestMove = moves[i];
+        }
+      }
+      return bestMove;
+    }
+
+    // =========================================================================
+    // 9. BOARD SYNCHRONIZATION & CINEMATIC COMBAT ORCHESTRATOR
+    // =========================================================================
+    function clearAllPieceMeshes() {
+      Object.keys(pieceMeshes).forEach((sq) => {
+        scene.remove(pieceMeshes[sq]);
+        delete pieceMeshes[sq];
+      });
+    }
+
+    function sync3DBoardWithChessState() {
+      clearAllPieceMeshes();
+      const board = chess.board();
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const cell = board[7 - r][f];
+          if (cell) {
+            const sq = FILES[f] + (r + 1);
+            const mesh = buildStoneWarriorMesh(cell.type, cell.color);
+            const pos = squareToWorld(sq);
+            mesh.position.copy(pos);
+            mesh.userData.square = sq;
+            scene.add(mesh);
+            pieceMeshes[sq] = mesh;
+          }
+        }
+      }
+      clearTileHighlights();
+      highlightKingInCheck();
+    }
+
+    function clearTileHighlights() {
+      Object.keys(tileHighlightMeshes).forEach((sq) => {
+        const hl = tileHighlightMeshes[sq];
+        hl.visible = false;
+        hl.userData.mode = 'none';
+      });
+    }
+
+    function highlightKingInCheck() {
+      if (!chess.in_check()) return;
+      const turnColor = chess.turn();
+      Object.keys(pieceMeshes).forEach((sq) => {
+        const w = pieceMeshes[sq];
+        if (w && w.userData.type === 'k' && w.userData.color === turnColor) {
+          const hl = tileHighlightMeshes[sq];
+          if (hl) {
+            hl.visible = true;
+            hl.userData.mode = 'check';
+            hl.userData.ringMat.color.setHex(0xef4444);
+            hl.userData.innerDiscMat.color.setHex(0xdc2626);
+          }
+        }
+      });
+    }
+
+    function setLetterbox(active) {
+      const topBar = document.getElementById('letterbox-top');
+      const botBar = document.getElementById('letterbox-bottom');
+      topBar.style.height = active ? '44px' : '0px';
+      botBar.style.height = active ? '44px' : '0px';
+    }
+
+    function sleepMs(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    // Execute a move with full 3D living warrior movement & 6-phase cinematic capture
+    async function executeMoveWithCinematic(moveObj) {
+      isAnimatingAction = true;
+      skipCurrentCombatRequested = false;
+      clearTileHighlights();
+
+      const fromSq = moveObj.from;
+      const toSq = moveObj.to;
+      const attacker = pieceMeshes[fromSq];
+      // Handle en-passant captured square
+      let capturedSq = toSq;
+      if (moveObj.flags && moveObj.flags.includes('e')) {
+        capturedSq = toSq[0] + fromSq[1];
+      }
+      const defender = pieceMeshes[capturedSq];
+      const isCapture = Boolean(moveObj.captured && defender);
+
+      const startPos = squareToWorld(fromSq);
+      const endPos = squareToWorld(toSq);
+      const moveAngle = Math.atan2(endPos.x - startPos.x, endPos.z - startPos.z);
+      const meta = WARRIOR_METADATA[moveObj.piece] || WARRIOR_METADATA.p;
+
+      const fastMode =
+        gameSettings.combatCameraMode === 'instant' ||
+        document.getElementById('chk-fast-combat').checked ||
+        gameSettings.reducedMotion;
+
+      if (attacker) {
+        if (isCapture && !fastMode) {
+          // ===================================================================
+          // 6-PHASE CINEMATIC CHESS COMBAT SEQUENCE
+          // ===================================================================
+          const combatOverlay = document.getElementById('combat-overlay');
+          const combatBanner = document.getElementById('combat-banner-text');
+          const attName = WARRIOR_METADATA[moveObj.piece].title.split(' (')[0];
+          const defName = WARRIOR_METADATA[moveObj.captured].title.split(' (')[0];
+          combatBanner.textContent = `${attName} Clashes With ${defName} on ${toSq.toUpperCase()}`;
+          combatOverlay.classList.remove('hidden');
+          document.getElementById('combat-feed-line').textContent = `⚔ ${attName} shatters ${defName} at ${toSq.toUpperCase()}!`;
+
+          const useMovieCam = gameSettings.combatCameraMode === 'full';
+          if (useMovieCam) {
+            setLetterbox(true);
+            cameraDirector.isCinematicOverride = true;
+          }
+
+          // PHASE 1 — Recognition (Attacker & Defender turn toward each other, lighting intensifies)
+          dramaticLight.position.set(endPos.x, 3.2, endPos.z);
+          dramaticLight.intensity = 2.4;
+          gsap.to(attacker.rotation, { y: moveAngle, duration: 0.28, ease: 'power2.out' });
+          const defAngle = Math.atan2(startPos.x - endPos.x, startPos.z - endPos.z);
+          gsap.to(defender.rotation, { y: defAngle, duration: 0.28, ease: 'power2.out' });
+          // Defender braces shield/weapon
+          gsap.to(defender.userData.bodyPivot.rotation, { x: -0.14, duration: 0.25 });
+
+          if (useMovieCam) {
+            const midPoint = new THREE.Vector3().lerpVectors(startPos, endPos, 0.65);
+            const sideDir = new THREE.Vector3(-(endPos.z - startPos.z), 0, endPos.x - startPos.x).normalize();
+            const camPos = midPoint.clone().addScaledVector(sideDir, 3.6).add(new THREE.Vector3(0, 2.3, 0));
+            cameraDirector.cinematicPos.copy(camera.position);
+            cameraDirector.cinematicLookAt.copy(cameraDirector.target);
+            gsap.to(cameraDirector.cinematicPos, {
+              x: camPos.x, y: camPos.y, z: camPos.z, duration: 0.55, ease: 'power2.inOut'
+            });
+            gsap.to(cameraDirector.cinematicLookAt, {
+              x: endPos.x, y: 0.75, z: endPos.z, duration: 0.55, ease: 'power2.inOut'
+            });
+          }
+
+          await sleepMs(skipCurrentCombatRequested ? 20 : 360);
+
+          // PHASE 2 — Approach (Attacker advances to striking distance just before target tile)
+          const dirVec = new THREE.Vector3().subVectors(endPos, startPos).normalize();
+          const strikePos = endPos.clone().addScaledVector(dirVec, -0.82);
+          const dist = startPos.distanceTo(strikePos);
+          const approachDur = skipCurrentCombatRequested ? 0.05 : Math.min(0.85, Math.max(0.35, dist * 0.16));
+
+          if (moveObj.piece === 'n') {
+            // Knight rears and leaps in an arc
+            audioEngine.playStoneStep(1.3);
+            gsap.to(attacker.position, { x: strikePos.x, z: strikePos.z, duration: approachDur, ease: 'power2.inOut' });
+            gsap.to(attacker.position, { y: 1.55, duration: approachDur * 0.5, yoyo: true, repeat: 1, ease: 'sine.out' });
+          } else {
+            // Heavy footsteps during approach
+            const steps = Math.max(2, Math.floor(dist / 1.1));
+            for (let s = 0; s < steps; s++) {
+              setTimeout(() => {
+                if (!skipCurrentCombatRequested) {
+                  audioEngine.playStoneStep(meta.weight);
+                  if (moveObj.piece === 'r') cameraDirector.triggerShake(0.08);
+                }
+              }, (s / steps) * approachDur * 1000);
+            }
+            gsap.to(attacker.position, { x: strikePos.x, z: strikePos.z, duration: approachDur, ease: 'power1.inOut' });
+          }
+
+          await sleepMs(skipCurrentCombatRequested ? 20 : approachDur * 1000);
+
+          // PHASE 3 & 4 — Dramatic Close-Up & Piece-Specific Combat Attack Animation
+          if (useMovieCam && !skipCurrentCombatRequested) {
+            const closeCam = endPos.clone()
+              .addScaledVector(dirVec, -1.6)
+              .add(new THREE.Vector3(dirVec.z * 2.2, 1.55, -dirVec.x * 2.2));
+            gsap.to(cameraDirector.cinematicPos, {
+              x: closeCam.x, y: closeCam.y, z: closeCam.z, duration: 0.28, ease: 'power2.out'
+            });
+          }
+
+          audioEngine.playWeaponAttack(moveObj.piece);
+          const arm = attacker.userData.rightArmGroup;
+          // Wind up weapon
+          gsap.to(arm.rotation, { x: -1.45, duration: 0.22, ease: 'back.out(2)' });
+          await sleepMs(skipCurrentCombatRequested ? 15 : 230);
+
+          // Downward lethal strike!
+          gsap.to(arm.rotation, { x: 0.95, duration: 0.13, ease: 'power4.in' });
+          gsap.to(attacker.userData.bodyPivot.position, { z: 0.25, duration: 0.12, yoyo: true, repeat: 1 });
+          await sleepMs(skipCurrentCombatRequested ? 15 : 130);
+
+          // PHASE 5 — Destruction (Physics Stone Shattering, Sparks, Impact Flash & Shake)
+          audioEngine.playStoneShatter();
+          cameraDirector.triggerShake(moveObj.piece === 'r' ? 0.36 : 0.24);
+          dramaticLight.intensity = 5.0;
+          gsap.to(dramaticLight, { intensity: 0, duration: 0.65 });
+
+          defender.visible = false;
+          spawnStoneDestruction(endPos, defender.userData.color, gameSettings.reducedMotion);
+
+          // Optional dramatic slow-motion pause at the moment of stone shatter
+          const impactWait = skipCurrentCombatRequested ? 40 : (gameSettings.slowMoImpact ? 620 : 380);
+          await sleepMs(impactWait);
+
+          // Reset attacker arm & step triumphantly onto conquered square
+          gsap.to(arm.rotation, { x: 0, duration: 0.3 });
+          gsap.to(attacker.position, { x: endPos.x, y: 0, z: endPos.z, duration: 0.28, ease: 'power2.out' });
+          audioEngine.playStoneStep(meta.weight);
+          await sleepMs(skipCurrentCombatRequested ? 30 : 300);
+
+          // PHASE 6 — Return to Gameplay Camera
+          combatOverlay.classList.add('hidden');
+          setLetterbox(false);
+          cameraDirector.isCinematicOverride = false;
+
+        } else {
+          // Non-capture movement (or Instant/Fast Capture mode)
+          gsap.to(attacker.rotation, { y: moveAngle, duration: 0.18 });
+          const dur = fastMode ? 0.22 : 0.48;
+          if (moveObj.piece === 'n') {
+            audioEngine.playStoneStep(1.25);
+            gsap.to(attacker.position, { x: endPos.x, z: endPos.z, duration: dur, ease: 'power2.inOut' });
+            gsap.to(attacker.position, { y: 1.35, duration: dur * 0.5, yoyo: true, repeat: 1, ease: 'sine.out' });
+          } else {
+            audioEngine.playStoneStep(meta.weight);
+            gsap.to(attacker.position, { x: endPos.x, y: 0, z: endPos.z, duration: dur, ease: 'power2.inOut' });
+            gsap.to(attacker.userData.bodyPivot.rotation, {
+              z: 0.08, duration: dur * 0.25, yoyo: true, repeat: 3
+            });
+          }
+          if (isCapture && defender) {
+            setTimeout(() => {
+              audioEngine.playStoneShatter();
+              defender.visible = false;
+              spawnStoneDestruction(endPos, defender.userData.color, true);
+            }, dur * 600);
+          }
+          await sleepMs(dur * 1000 + 40);
+        }
+      }
+
+      // Apply logical move to chess.js state & synchronize board (handles castling rook & promotion)
+      chess.move({
+        from: moveObj.from,
+        to: moveObj.to,
+        promotion: moveObj.promotion || 'q'
+      });
+
+      sync3DBoardWithChessState();
+      updateHUDAndChronicle(moveObj);
+
+      // Check for Game Over / Checkmate / Check
+      if (chess.game_over()) {
+        isAnimatingAction = false;
+        await handleGameOverSequence();
+        return;
+      }
+
+      if (chess.in_check()) {
+        audioEngine.playCheckHorn();
+        document.getElementById('combat-feed-line').textContent = `⚠ Check! The ${chess.turn() === 'w' ? 'Alabaster' : 'Obsidian'} King is threatened!`;
+      }
+
+      // Auto-rotate camera in 2-Player mode if enabled
+      if (gameSettings.mode === 'pvp' && gameSettings.autoRotatePvP) {
+        cameraDirector.setPlayerPerspective(chess.turn());
+      }
+
+      isAnimatingAction = false;
+
+      // Trigger AI Opponent Turn if applicable
+      if (isGameActive && gameSettings.mode === 'ai' && chess.turn() !== gameSettings.humanColor) {
+        document.getElementById('hud-status-sub').textContent = 'Ancient AI Archmage is contemplating...';
+        setTimeout(async () => {
+          if (!isGameActive || chess.game_over()) return;
+          const aiMove = computeBestAIMove();
+          if (aiMove) {
+            await executeMoveWithCinematic(aiMove);
+          }
+        }, 380);
+      }
+    }
+
+    // =========================================================================
+    // 10. CHECKMATE CINEMATIC SEQUENCE
+    // =========================================================================
+    async function handleGameOverSequence() {
+      isGameActive = false;
+      const modal = document.getElementById('gameover-modal');
+      const subEl = document.getElementById('gameover-subtitle');
+      const titleEl = document.getElementById('gameover-title');
+      const vicEl = document.getElementById('gameover-victory-banner');
+      const sumEl = document.getElementById('gameover-summary');
+
+      if (chess.in_checkmate()) {
+        const loserColor = chess.turn();
+        const winnerColor = loserColor === 'w' ? 'b' : 'w';
+        const winnerName = winnerColor === 'w' ? 'Alabaster Stone Army (White)' : 'Obsidian Marble Army (Black)';
+
+        audioEngine.playCheckmateFanfare();
+        setLetterbox(true);
+
+        // Locate defeated King and trigger kneeling animation; victorious army enters victory pose
+        let defeatedKingPos = new THREE.Vector3(0, 0, 0);
+        Object.keys(pieceMeshes).forEach((sq) => {
+          const w = pieceMeshes[sq];
+          if (!w) return;
+          if (w.userData.type === 'k' && w.userData.color === loserColor) {
+            defeatedKingPos.copy(w.position);
+            w.userData.isKneeling = true;
+            // Defeated King kneels and lowers his royal greatsword
+            gsap.to(w.userData.bodyPivot.position, { y: -0.22, duration: 1.2, ease: 'power2.out' });
+            gsap.to(w.userData.bodyPivot.rotation, { x: 0.42, duration: 1.2, ease: 'power2.out' });
+            gsap.to(w.userData.rightArmGroup.rotation, { x: 0.65, z: 0.35, duration: 1.2 });
+          } else if (w.userData.color === winnerColor) {
+            w.userData.isVictoryPose = true;
+            gsap.to(w.userData.rightArmGroup.rotation, { x: -1.1, duration: 0.9, ease: 'back.out(1.7)' });
+          }
+        });
+
+        // Spotlight on the kneeling King
+        dramaticLight.position.set(defeatedKingPos.x, 3.8, defeatedKingPos.z);
+        dramaticLight.color.setHex(0xef4444);
+        dramaticLight.intensity = 3.5;
+
+        cameraDirector.desiredTarget.copy(defeatedKingPos);
+        cameraDirector.desiredSpherical.radius = 6.8;
+        cameraDirector.desiredSpherical.phi = 0.85;
+
+        await sleepMs(1600);
+        setLetterbox(false);
+
+        subEl.textContent = 'THE ROYAL STONE GUARDIAN KNEELS';
+        titleEl.textContent = 'CHECKMATE';
+        vicEl.textContent = 'VICTORY';
+        sumEl.textContent = `${winnerName} triumphs after ${Math.ceil(chess.history().length / 2)} moves. The defeated King lowers his royal weapon in solemn surrender.`;
+      } else {
+        let drawReason = 'Stalemate — No legal moves remain.';
+        if (chess.in_threefold_repetition()) drawReason = 'Draw by Threefold Repetition of position.';
+        else if (chess.insufficient_material()) drawReason = 'Draw by Insufficient Stone Warriors.';
+        else if (chess.in_draw()) drawReason = 'Draw by the Fifty-Move Rule.';
+
+        subEl.textContent = 'ANCIENT ACCORD REACHED';
+        titleEl.textContent = 'STALEMATE';
+        vicEl.textContent = 'DRAW';
+        sumEl.textContent = drawReason;
+      }
+
+      modal.classList.remove('hidden');
+    }
+
+    // =========================================================================
+    // 11. OPENING 12-SECOND REAL-TIME 3D CINEMATIC SEQUENCE
+    // =========================================================================
+    let introTime = 0;
+    function startOpeningCinematic() {
+      isOpeningIntroActive = true;
+      introTime = 0;
+      setLetterbox(true);
+      document.getElementById('intro-overlay').classList.remove('hidden');
+      document.getElementById('main-menu-modal').classList.add('hidden');
+      cameraDirector.isCinematicOverride = true;
+    }
+
+    function finishOpeningCinematic() {
+      if (!isOpeningIntroActive) return;
+      isOpeningIntroActive = false;
+      setLetterbox(false);
+      document.getElementById('intro-overlay').classList.add('hidden');
+      cameraDirector.isCinematicOverride = false;
+      cameraDirector.setPlayerPerspective(gameSettings.humanColor);
+      if (!isGameActive) {
+        document.getElementById('main-menu-modal').classList.remove('hidden');
+      }
+    }
+
+    function updateOpeningCinematic(dt) {
+      if (!isOpeningIntroActive) return;
+      introTime += dt;
+      const phaseLabel = document.getElementById('intro-phase-label');
+      const subText = document.getElementById('intro-subtitle');
+
+      if (introTime < 3.0) {
+        // 0–3s: Mysterious castle chamber with atmospheric fog
+        const t = introTime / 3.0;
+        phaseLabel.textContent = 'I. The Subterranean Gothic Chamber';
+        subText.textContent = '"Deep beneath the ancient stones lies the Hall of the Living Guardians..."';
+        cameraDirector.cinematicPos.set(-13 + t * 3, 6.5 - t * 1.2, 14 - t * 2.5);
+        cameraDirector.cinematicLookAt.set(0, 1.5, 0);
+      } else if (introTime < 6.0) {
+        // 3–6s: Camera travels between enormous stone pillars toward the central chessboard
+        const t = (introTime - 3.0) / 3.0;
+        phaseLabel.textContent = 'II. Passage Through the Pillars';
+        subText.textContent = '"Carved from alabaster and obsidian marble, 64 tiles await command..."';
+        cameraDirector.cinematicPos.set(-10 + t * 6.5, 3.2 - t * 0.8, 11.5 - t * 4.5);
+        cameraDirector.cinematicLookAt.set(0, 0.8, 0);
+      } else if (introTime < 9.0) {
+        // 6–9s: Stone warriors awaken with subtle motions and heavy footsteps
+        const t = (introTime - 6.0) / 3.0;
+        phaseLabel.textContent = 'III. Awakening of the Stone Warriors';
+        subText.textContent = '"Thirty-two colossal warriors stir to life as torchlight ignites their runes..."';
+        const angle = t * 1.2;
+        cameraDirector.cinematicPos.set(Math.sin(angle) * 5.8, 1.65, Math.cos(angle) * 5.8);
+        cameraDirector.cinematicLookAt.set(0, 0.95, 0);
+      } else if (introTime < 12.0) {
+        // 9–12s: Camera rises to reveal the entire chessboard
+        const t = (introTime - 9.0) / 3.0;
+        phaseLabel.textContent = 'IV. The Trial Begins';
+        subText.textContent = '"Step forward and command the Enchanted Chess."';
+        cameraDirector.cinematicPos.set(0, 2.0 + t * 6.8, 6.2 + t * 5.2);
+        cameraDirector.cinematicLookAt.set(0, 0.5, 0);
+      } else {
+        finishOpeningCinematic();
+      }
+    }
+
+    // =========================================================================
+    // 12. INTERACTIVE RAYCASTING (TILE HOVER, PIECE SELECTION & LEGAL MOVES)
+    // =========================================================================
+    const raycaster = new THREE.Raycaster();
+    const pointerNDC = new THREE.Vector2();
+    let hoveredSquare = null;
+
+    function getSquareFromIntersection(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointerNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointerNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointerNDC, camera);
+
+      // Check tiles and piece meshes
+      const tilesList = Object.values(tileMeshes);
+      const hits = raycaster.intersectObjects(tilesList, false);
+      if (hits.length > 0 && hits[0].object.userData.square) {
+        return hits[0].object.userData.square;
+      }
+
+      // Check if user clicked directly on a tall 3D stone warrior statue
+      const warriorRoots = Object.values(pieceMeshes);
+      const pieceHits = raycaster.intersectObjects(warriorRoots, true);
+      if (pieceHits.length > 0) {
+        let obj = pieceHits[0].object;
+        while (obj && !obj.userData.square) {
+          obj = obj.parent;
+        }
+        if (obj && obj.userData.square) return obj.userData.square;
+      }
+      return null;
+    }
+
+    function selectSquare(sq) {
+      clearTileHighlights();
+      highlightKingInCheck();
+      selectedSquare = sq;
+      if (!sq) {
+        legalMovesForSelected = [];
+        document.getElementById('warrior-inspector').classList.add('hidden');
+        return;
+      }
+
+      const piece = chess.get(sq);
+      if (piece) {
+        const meta = WARRIOR_METADATA[piece.type];
+        document.getElementById('inspector-piece-name').textContent = meta.title;
+        document.getElementById('inspector-square').textContent = sq.toUpperCase();
+        document.getElementById('inspector-piece-desc').textContent = meta.desc;
+        document.getElementById('warrior-inspector').classList.remove('hidden');
+      }
+
+      legalMovesForSelected = chess.moves({ square: sq, verbose: true });
+      document.getElementById('inspector-legal-count').textContent =
+        `Legal Destinations: ${legalMovesForSelected.length}`;
+
+      // Highlight selected origin square in gold
+      const originHl = tileHighlightMeshes[sq];
+      if (originHl) {
+        originHl.visible = true;
+        originHl.userData.mode = 'selected';
+        originHl.userData.ringMat.color.setHex(0xfbbf24);
+        originHl.userData.innerDiscMat.color.setHex(0xf59e0b);
+      }
+
+      // Highlight all legal destination squares (Cyan/Emerald for moves, Crimson/Orange for captures)
+      legalMovesForSelected.forEach((m) => {
+        const hl = tileHighlightMeshes[m.to];
+        if (!hl) return;
+        hl.visible = true;
+        if (m.captured) {
+          hl.userData.mode = 'capture';
+          hl.userData.ringMat.color.setHex(0xf43f5e);
+          hl.userData.innerDiscMat.color.setHex(0xe11d48);
+        } else {
+          hl.userData.mode = 'move';
+          hl.userData.ringMat.color.setHex(0x38bdf8);
+          hl.userData.innerDiscMat.color.setHex(0x0ea5e9);
+        }
+      });
+
+      audioEngine.playSelectRune();
+    }
+
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      if (!isGameActive || isAnimatingAction || isOpeningIntroActive) return;
+      const sq = getSquareFromIntersection(e.clientX, e.clientY);
+      hoveredSquare = sq;
+      renderer.domElement.style.cursor = sq ? 'pointer' : 'grab';
+    });
+
+    renderer.domElement.addEventListener('pointerup', async (e) => {
+      if (e.button !== 0 || window._cameraDraggedRecently) return;
+      audioEngine.init();
+      if (!isGameActive || isAnimatingAction || isOpeningIntroActive) return;
+
+      // Prevent human moving on AI's turn
+      if (gameSettings.mode === 'ai' && chess.turn() !== gameSettings.humanColor) return;
+
+      const clickedSq = getSquareFromIntersection(e.clientX, e.clientY);
+      if (!clickedSq) {
+        selectSquare(null);
+        return;
+      }
+
+      // Check if clicked square is a legal destination for the currently selected warrior
+      const chosenMove = legalMovesForSelected.find((m) => m.to === clickedSq);
+      if (selectedSquare && chosenMove) {
+        // Check if move is a Pawn Promotion
+        if (chosenMove.flags.includes('p')) {
+          pendingPromotionMove = chosenMove;
+          document.getElementById('promotion-modal').classList.remove('hidden');
+          return;
+        }
+        selectSquare(null);
+        await executeMoveWithCinematic(chosenMove);
+        return;
+      }
+
+      // Otherwise, if clicked square contains a friendly warrior, select it
+      const clickedPiece = chess.get(clickedSq);
+      if (clickedPiece && clickedPiece.color === chess.turn()) {
+        selectSquare(clickedSq);
+      } else {
+        selectSquare(null);
+      }
+    });
+
+    // =========================================================================
+    // 13. HUD, CHRONICLE, CLOCKS & MENU EVENT HANDLERS
+    // =========================================================================
+    function formatClock(sec) {
+      if (gameSettings.clockSeconds === 0) return '∞';
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+
+    function updateHUDAndChronicle(lastMove = null) {
+      const turn = chess.turn();
+      const turnGem = document.getElementById('turn-gem');
+      const turnTitle = document.getElementById('hud-turn-title');
+      const statusSub = document.getElementById('hud-status-sub');
+      const checkAlert = document.getElementById('hud-check-alert');
+
+      if (turn === 'w') {
+        turnGem.className = 'w-3.5 h-3.5 rounded-full bg-amber-200 shadow-[0_0_12px_#fde68a] border border-white';
+        turnTitle.textContent = "ALABASTER'S COMMAND (WHITE)";
+      } else {
+        turnGem.className = 'w-3.5 h-3.5 rounded-full bg-sky-400 shadow-[0_0_12px_#38bdf8] border border-sky-200';
+        turnTitle.textContent = "OBSIDIAN'S COMMAND (BLACK)";
+      }
+
+      statusSub.textContent = lastMove
+        ? `Last command: ${lastMove.san} (${lastMove.from.toUpperCase()} → ${lastMove.to.toUpperCase()})`
+        : 'Select a living stone warrior to command';
+
+      if (chess.in_check()) {
+        checkAlert.classList.remove('hidden');
+      } else {
+        checkAlert.classList.add('hidden');
+      }
+
+      // Update Move History Table
+      const history = chess.history({ verbose: true });
+      const listEl = document.getElementById('move-history-list');
+      document.getElementById('move-counter-badge').textContent = `Move ${Math.floor(history.length / 2) + 1}`;
+
+      if (history.length === 0) {
+        listEl.innerHTML = '<div class="text-slate-500 italic text-center py-6 font-sans">The ancient stones await the first command...</div>';
+      } else {
+        let html = '';
+        for (let i = 0; i < history.length; i += 2) {
+          const moveNum = Math.floor(i / 2) + 1;
+          const wMove = history[i];
+          const bMove = history[i + 1];
+          const wCap = wMove.captured ? '⚔' : '';
+          const bCap = bMove && bMove.captured ? '⚔' : '';
+          html += `
+            <div class="grid grid-cols-7 items-center px-2 py-1 rounded ${i + 2 >= history.length ? 'bg-amber-500/15 border border-amber-500/30' : 'hover:bg-slate-800/50'}">
+              <span class="col-span-1 text-slate-500">${moveNum}.</span>
+              <span class="col-span-3 text-amber-100 font-semibold">${wMove.san} <span class="text-amber-400 text-[10px]">${wCap}</span></span>
+              <span class="col-span-3 text-sky-200 font-semibold">${bMove ? bMove.san : ''} <span class="text-rose-400 text-[10px]">${bCap}</span></span>
+            </div>
+          `;
+        }
+        listEl.innerHTML = html;
+        listEl.scrollTop = listEl.scrollHeight;
+      }
+
+      // Compute Captured Warriors for Both Sides
+      const capByWhite = [];
+      const capByBlack = [];
+      history.forEach((m) => {
+        if (m.captured) {
+          const sym = m.color === 'w'
+            ? WARRIOR_METADATA[m.captured].symbolB
+            : WARRIOR_METADATA[m.captured].symbolW;
+          if (m.color === 'w') capByWhite.push(sym);
+          else capByBlack.push(sym);
+        }
+      });
+      document.getElementById('captured-by-white').textContent = capByWhite.join(' ');
+      document.getElementById('captured-by-black').textContent = capByBlack.join(' ');
+    }
+
+    function startNewMatch(modeOverride = null) {
+      audioEngine.init();
+      finishOpeningCinematic();
+
+      if (modeOverride) gameSettings.mode = modeOverride;
+      gameSettings.aiDifficulty = document.getElementById('menu-select-difficulty').value;
+      gameSettings.humanColor = document.getElementById('menu-select-color').value;
+      gameSettings.clockSeconds = parseInt(document.getElementById('menu-select-clock').value, 10);
+
+      chess.reset();
+      selectedSquare = null;
+      legalMovesForSelected = [];
+      isAnimatingAction = false;
+      isGameActive = true;
+      dramaticLight.intensity = 0;
+
+      whiteTimeLeft = gameSettings.clockSeconds;
+      blackTimeLeft = gameSettings.clockSeconds;
+      document.getElementById('white-clock').textContent = formatClock(whiteTimeLeft);
+      document.getElementById('black-clock').textContent = formatClock(blackTimeLeft);
+
+      if (clockInterval) clearInterval(clockInterval);
+      if (gameSettings.clockSeconds > 0) {
+        clockInterval = setInterval(() => {
+          if (!isGameActive || isAnimatingAction || chess.game_over()) return;
+          if (chess.turn() === 'w') {
+            whiteTimeLeft = Math.max(0, whiteTimeLeft - 1);
+            document.getElementById('white-clock').textContent = formatClock(whiteTimeLeft);
+            if (whiteTimeLeft === 0) {
+              isGameActive = false;
+              document.getElementById('gameover-subtitle').textContent = 'SANDS OF TIME EXPIRED';
+              document.getElementById('gameover-title').textContent = 'TIME OUT';
+              document.getElementById('gameover-victory-banner').textContent = 'OBSIDIAN VICTORY';
+              document.getElementById('gameover-summary').textContent = 'Alabaster army exhausted its allotted chamber time.';
+              document.getElementById('gameover-modal').classList.remove('hidden');
+            }
+          } else {
+            blackTimeLeft = Math.max(0, blackTimeLeft - 1);
+            document.getElementById('black-clock').textContent = formatClock(blackTimeLeft);
+            if (blackTimeLeft === 0) {
+              isGameActive = false;
+              document.getElementById('gameover-subtitle').textContent = 'SANDS OF TIME EXPIRED';
+              document.getElementById('gameover-title').textContent = 'TIME OUT';
+              document.getElementById('gameover-victory-banner').textContent = 'ALABASTER VICTORY';
+              document.getElementById('gameover-summary').textContent = 'Obsidian army exhausted its allotted chamber time.';
+              document.getElementById('gameover-modal').classList.remove('hidden');
+            }
+          }
+        }, 1000);
+      }
+
+      const modeBadge = document.getElementById('hud-mode-badge');
+      modeBadge.textContent = gameSettings.mode === 'ai'
+        ? `VS AI (${gameSettings.aiDifficulty.toUpperCase()})`
+        : 'TWO PLAYERS';
+
+      document.getElementById('main-menu-modal').classList.add('hidden');
+      document.getElementById('gameover-modal').classList.add('hidden');
+      document.getElementById('game-hud-top').classList.remove('hidden');
+      document.getElementById('battle-chronicle').classList.remove('hidden');
+      document.getElementById('game-hud-bottom').classList.remove('hidden');
+
+      sync3DBoardWithChessState();
+      updateHUDAndChronicle();
+
+      const startPerspective = gameSettings.mode === 'ai' ? gameSettings.humanColor : 'w';
+      cameraDirector.setPlayerPerspective(startPerspective);
+
+      // If Human chose Black vs AI, trigger AI's opening White move
+      if (gameSettings.mode === 'ai' && gameSettings.humanColor === 'b') {
+        setTimeout(async () => {
+          const aiMove = computeBestAIMove();
+          if (aiMove) await executeMoveWithCinematic(aiMove);
+        }, 550);
+      }
+    }
+
+    // Wire Up All UI Buttons & Controls
+    document.getElementById('btn-skip-intro').addEventListener('click', () => {
+      audioEngine.init();
+      finishOpeningCinematic();
+    });
+
+    document.getElementById('btn-replay-intro').addEventListener('click', () => {
+      audioEngine.init();
+      startOpeningCinematic();
+    });
+
+    document.getElementById('btn-skip-combat').addEventListener('click', () => {
+      skipCurrentCombatRequested = true;
+    });
+
+    document.getElementById('btn-menu-start').addEventListener('click', () => startNewMatch('ai'));
+    document.getElementById('btn-menu-vs-ai').addEventListener('click', () => startNewMatch('ai'));
+    document.getElementById('btn-menu-two-players').addEventListener('click', () => startNewMatch('pvp'));
+
+    document.getElementById('btn-menu-settings').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.remove('hidden');
+    });
+    document.getElementById('btn-open-settings').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.remove('hidden');
+    });
+    document.getElementById('btn-close-settings').addEventListener('click', () => {
+      document.getElementById('settings-modal').classList.add('hidden');
+    });
+    document.getElementById('btn-save-settings').addEventListener('click', () => {
+      gameSettings.graphicsQuality = document.getElementById('setting-graphics').value;
+      gameSettings.combatCameraMode = document.getElementById('setting-combat-cam').value;
+      gameSettings.slowMoImpact = document.getElementById('setting-slowmo').checked;
+      gameSettings.autoRotatePvP = document.getElementById('setting-autorotate').checked;
+      gameSettings.reducedMotion = document.getElementById('setting-reduced-motion').checked;
+      audioEngine.setAmbience(document.getElementById('setting-ambience').checked);
+
+      // Apply Graphics Preset dynamically
+      if (gameSettings.graphicsQuality === 'performance') {
+        renderer.shadowMap.enabled = false;
+        dustParticles.visible = false;
+      } else {
+        renderer.shadowMap.enabled = true;
+        dustParticles.visible = true;
+      }
+      document.getElementById('settings-modal').classList.add('hidden');
+    });
+
+    document.getElementById('setting-volume').addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      document.getElementById('setting-volume-label').textContent = `${val}%`;
+      audioEngine.setVolume(val / 100);
+    });
+
+    document.getElementById('btn-menu-howto').addEventListener('click', () => {
+      document.getElementById('howto-modal').classList.remove('hidden');
+    });
+    document.getElementById('btn-close-howto').addEventListener('click', () => {
+      document.getElementById('howto-modal').classList.add('hidden');
+    });
+    document.getElementById('btn-howto-done').addEventListener('click', () => {
+      document.getElementById('howto-modal').classList.add('hidden');
+    });
+
+    // Promotion choice buttons
+    document.querySelectorAll('.promote-choice').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const promoPiece = btn.getAttribute('data-promote') || 'q';
+        document.getElementById('promotion-modal').classList.add('hidden');
+        if (pendingPromotionMove) {
+          const move = Object.assign({}, pendingPromotionMove, { promotion: promoPiece });
+          pendingPromotionMove = null;
+          selectSquare(null);
+          await executeMoveWithCinematic(move);
+        }
+      });
+    });
+
+    // Top HUD Action Buttons
+    document.getElementById('btn-camera-preset').addEventListener('click', () => {
+      const name = cameraDirector.cyclePreset();
+      document.getElementById('camera-preset-label').textContent = name;
+    });
+
+    document.getElementById('btn-flip-board').addEventListener('click', () => {
+      cameraDirector.desiredSpherical.theta += Math.PI;
+    });
+
+    document.getElementById('btn-undo-move').addEventListener('click', () => {
+      if (isAnimatingAction || chess.history().length === 0) return;
+      chess.undo();
+      if (gameSettings.mode === 'ai' && chess.turn() !== gameSettings.humanColor && chess.history().length > 0) {
+        chess.undo();
+      }
+      selectSquare(null);
+      sync3DBoardWithChessState();
+      updateHUDAndChronicle();
+    });
+
+    document.getElementById('btn-restart-game').addEventListener('click', () => {
+      if (isAnimatingAction) return;
+      startNewMatch();
+    });
+
+    document.getElementById('btn-toggle-history').addEventListener('click', () => {
+      const el = document.getElementById('battle-chronicle');
+      el.classList.toggle('hidden');
+    });
+
+    document.getElementById('btn-mute-audio').addEventListener('click', (e) => {
+      const muted = audioEngine.toggleMute();
+      e.currentTarget.textContent = muted ? '🔇' : '🔊';
+    });
+
+    document.getElementById('btn-exit-menu').addEventListener('click', () => {
+      isGameActive = false;
+      document.getElementById('game-hud-top').classList.add('hidden');
+      document.getElementById('battle-chronicle').classList.add('hidden');
+      document.getElementById('game-hud-bottom').classList.add('hidden');
+      document.getElementById('warrior-inspector').classList.add('hidden');
+      document.getElementById('main-menu-modal').classList.remove('hidden');
+    });
+
+    document.getElementById('btn-gameover-play-again').addEventListener('click', () => startNewMatch());
+    document.getElementById('btn-gameover-main-menu').addEventListener('click', () => {
+      document.getElementById('gameover-modal').classList.add('hidden');
+      document.getElementById('game-hud-top').classList.add('hidden');
+      document.getElementById('battle-chronicle').classList.add('hidden');
+      document.getElementById('game-hud-bottom').classList.add('hidden');
+      document.getElementById('main-menu-modal').classList.remove('hidden');
+    });
+
+    // Bottom Camera Bar Controls
+    document.getElementById('btn-cam-orbit-left').addEventListener('click', () => {
+      cameraDirector.desiredSpherical.theta -= 0.45;
+    });
+    document.getElementById('btn-cam-orbit-right').addEventListener('click', () => {
+      cameraDirector.desiredSpherical.theta += 0.45;
+    });
+    document.getElementById('btn-cam-zoom-in').addEventListener('click', () => {
+      cameraDirector.desiredSpherical.radius = Math.max(6.5, cameraDirector.desiredSpherical.radius - 1.4);
+    });
+    document.getElementById('btn-cam-zoom-out').addEventListener('click', () => {
+      cameraDirector.desiredSpherical.radius = Math.min(18.5, cameraDirector.desiredSpherical.radius + 1.4);
+    });
+
+    // Keyboard Shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        if (isOpeningIntroActive) finishOpeningCinematic();
+        else if (isAnimatingAction) skipCurrentCombatRequested = true;
+      } else if (e.key === 'c' || e.key === 'C') {
+        const name = cameraDirector.cyclePreset();
+        document.getElementById('camera-preset-label').textContent = name;
+      } else if (e.key === 'f' || e.key === 'F') {
+        cameraDirector.desiredSpherical.theta += Math.PI;
+      } else if (e.key === 'z' || e.key === 'Z') {
+        document.getElementById('btn-undo-move').click();
+      } else if (e.key === 'm' || e.key === 'M') {
+        document.getElementById('btn-mute-audio').click();
+      }
+    });
+
+    // =========================================================================
+    // 14. MAIN 60 FPS RENDER & ANIMATION LOOP
+    // =========================================================================
+    let lastFrameTime = performance.now();
+    let frameCount = 0;
+    let fpsTimer = 0;
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
+      const elapsed = now * 0.001;
+
+      // FPS counter telemetry
+      frameCount++;
+      fpsTimer += dt;
+      if (fpsTimer >= 1.0) {
+        const fpsEl = document.getElementById('fps-badge');
+        if (fpsEl) fpsEl.textContent = `${frameCount} FPS`;
+        frameCount = 0;
+        fpsTimer = 0;
+      }
+
+      // 1. Update Opening Cinematic or Orbital Camera
+      if (isOpeningIntroActive) {
+        updateOpeningCinematic(dt);
+      }
+      cameraDirector.update(dt);
+
+      // 2. Animate Living Stone Warriors (Breathing, Weapon Poise, Floating Orbs)
+      Object.values(pieceMeshes).forEach((w) => {
+        const ud = w.userData;
+        if (!ud || ud.isKneeling) return;
+        const t = elapsed * 2.1 + ud.idlePhase;
+        ud.bodyPivot.position.y = Math.sin(t) * 0.018;
+        ud.headGroup.rotation.y = Math.sin(t * 0.6) * 0.07;
+        if (!isAnimatingAction && !ud.isVictoryPose) {
+          ud.rightArmGroup.rotation.z = Math.sin(t * 0.8) * 0.035;
+        }
+        if (ud.specialOrb) {
+          ud.specialOrb.rotation.y += dt * 1.8;
+        }
+      });
+
+      // 3. Animate Tile Highlights & Hover Glow
+      Object.keys(tileHighlightMeshes).forEach((sq) => {
+        const hl = tileHighlightMeshes[sq];
+        if (sq === hoveredSquare && hl.userData.mode === 'none' && isGameActive && !isAnimatingAction) {
+          hl.visible = true;
+          hl.userData.ringMat.color.setHex(0xfde68a);
+          hl.userData.innerDiscMat.color.setHex(0xfef08a);
+        } else if (sq !== hoveredSquare && hl.userData.mode === 'none') {
+          hl.visible = false;
+        }
+        if (hl.visible) {
+          const pulse = 1 + Math.sin(elapsed * 4.5) * 0.06;
+          hl.scale.set(pulse, 1, pulse);
+        }
+      });
+
+      // 4. Flicker Castle Torches & Fire Braziers
+      torchFlames.forEach((f) => {
+        const s = 0.88 + Math.sin(elapsed * 11 + f.phase) * 0.14 + Math.cos(elapsed * 19 + f.phase) * 0.08;
+        f.mesh.scale.set(s, 0.85 + Math.sin(elapsed * 15 + f.phase) * 0.22, s);
+      });
+      torchLights.forEach((tl) => {
+        tl.light.intensity = 1.25 + Math.sin(elapsed * 10 + tl.phase) * 0.25;
+      });
+
+      // 5. Drift Floating Dust Motes
+      if (dustParticles.visible) {
+        const posAttr = dustGeo.getAttribute('position');
+        for (let i = 0; i < DUST_COUNT; i++) {
+          let y = posAttr.getY(i) + dt * 0.18;
+          if (y > 11) y = 0.2;
+          posAttr.setY(i, y);
+        }
+        posAttr.needsUpdate = true;
+      }
+
+      // 6. Update Physics Stone Shatter Debris
+      updateDebrisPhysics(dt);
+
+      renderer.render(scene, camera);
+    }
+
+    // Handle Responsive Viewport Resize
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Initialize Board & Launch Opening Cinematic on Load
+    window.addEventListener('load', () => {
+      sync3DBoardWithChessState();
+      startOpeningCinematic();
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>
